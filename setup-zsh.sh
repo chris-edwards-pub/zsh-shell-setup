@@ -610,10 +610,15 @@ uninstall_zshrc() {
         return 0
     fi
 
-    # Find the most recent .zshrc backup
-    local latest_backup
-    latest_backup="$(find "$TARGET_HOME" -maxdepth 1 -name '.zshrc.bak.*' -print0 2>/dev/null \
-        | xargs -0 ls -1t 2>/dev/null | head -1 || true)"
+    # Find the most recent .zshrc backup (filenames are .zshrc.bak.YYYYMMDDHHMMSS)
+    local latest_backup=""
+    local -a backups=()
+    while IFS= read -r -d '' f; do
+        backups+=("$f")
+    done < <(find "$TARGET_HOME" -maxdepth 1 -name '.zshrc.bak.*' -print0 2>/dev/null)
+    if [[ ${#backups[@]} -gt 0 ]]; then
+        IFS=$'\n' read -r latest_backup < <(printf '%s\n' "${backups[@]}" | sort -r | head -1)
+    fi
 
     if [[ -n "$latest_backup" ]]; then
         info "Found .zshrc backup: $latest_backup"
