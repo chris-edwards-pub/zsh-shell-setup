@@ -2,6 +2,9 @@
 .DS_Store
 ._*
 
+# Claude Code
+.claude/
+
 # Editors
 *.swp
 *.swo
