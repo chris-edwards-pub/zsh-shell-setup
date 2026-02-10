@@ -79,19 +79,19 @@ The uninstall will:
 
 | Plugin | Description |
 |--------|-------------|
-| git | Git aliases and functions (`ga`, `gco`, `gp`, etc.) |
-| z | Jump to frequently used directories by partial name |
-| extract | Extract any archive with a single command |
-| sudo | Press ESC twice to prepend sudo to last command |
-| colored-man-pages | Colorized man pages for easier reading |
-| docker | Docker command completions and aliases |
-| docker-compose | Docker Compose command completions |
-| npm | npm command completions and aliases |
-| history-substring-search | Fish-like history search with arrow keys |
-| aws | AWS CLI command completions and aliases |
-| kubectl | Kubectl command completions and aliases |
-| kube-ps1 | Show Kubernetes context/namespace in prompt |
-| macos | macOS utilities (`ofd`, `cdf`, etc.) — macOS only |
+| [git](https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/git) | Git aliases and functions (`ga`, `gco`, `gp`, etc.) |
+| [z](https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/z) | Jump to frequently used directories by partial name |
+| [extract](https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/extract) | Extract any archive with a single command |
+| [sudo](https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/sudo) | Press ESC twice to prepend sudo to last command |
+| [colored-man-pages](https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/colored-man-pages) | Colorized man pages for easier reading |
+| [docker](https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/docker) | Docker command completions and aliases |
+| [docker-compose](https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/docker-compose) | Docker Compose command completions |
+| [npm](https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/npm) | npm command completions and aliases |
+| [history-substring-search](https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/history-substring-search) | Fish-like history search with arrow keys |
+| [aws](https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/aws) | AWS CLI command completions and aliases |
+| [kubectl](https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/kubectl) | Kubectl command completions and aliases |
+| [kube-ps1](https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/kube-ps1) | Show Kubernetes context/namespace in prompt |
+| [macos](https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/macos) | macOS utilities (`ofd`, `cdf`, etc.) — macOS only |
 
 ### External (cloned via git)
 
