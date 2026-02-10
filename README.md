@@ -7,7 +7,7 @@ Automated setup script for zsh and oh-my-zsh with interactive plugin selection.
 ## Supported Operating Systems
 
 - **macOS** (via Homebrew)
-- **Ubuntu / Debian** (via apt)
+- **Ubuntu / Debian / Raspberry Pi OS** (via apt)
 - **RHEL / CentOS / Rocky / Alma / Fedora** (via dnf/yum)
 
 ## Prerequisites

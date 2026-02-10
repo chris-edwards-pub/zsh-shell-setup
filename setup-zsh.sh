@@ -106,7 +106,7 @@ Options:
 
 Supported operating systems:
   - macOS (via Homebrew)
-  - Ubuntu / Debian (via apt)
+  - Ubuntu / Debian / Raspberry Pi OS (via apt)
   - RHEL / CentOS / Rocky / Alma / Fedora (via dnf/yum)
 
 Available plugins (bundled with oh-my-zsh):
@@ -219,7 +219,7 @@ detect_os() {
                 # shellcheck source=/dev/null
                 . /etc/os-release
                 case "$ID" in
-                    ubuntu|debian)
+                    ubuntu|debian|raspbian)
                         OS_TYPE="ubuntu"
                         PKG_MANAGER="apt"
                         ;;
