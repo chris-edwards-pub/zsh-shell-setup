@@ -603,6 +603,7 @@ install_starship() {
     if [[ "$DRY_RUN" == true ]]; then
         echo -e "${YELLOW}[DRY RUN]${NC} Would set ZSH_THEME=\"\" in $zshrc"
         echo -e "${YELLOW}[DRY RUN]${NC} Would append 'eval \"\$(starship init zsh)\"' to $zshrc"
+        echo -e "${YELLOW}[DRY RUN]${NC} Would create config at $TARGET_HOME/.config/starship.toml"
         success "Would configure Starship in $zshrc"
         return 0
     fi
@@ -630,6 +631,72 @@ install_starship() {
         success "Added Starship init to $zshrc"
     else
         success "Starship init already present in $zshrc"
+    fi
+
+    # Create default starship.toml config
+    local config_dir="$TARGET_HOME/.config"
+    local config_file="$config_dir/starship.toml"
+
+    run_as_user "$TARGET_USER" "mkdir -p '$config_dir'"
+
+    if [[ -f "$config_file" ]]; then
+        info "Starship config already exists at $config_file — not overwriting"
+    else
+        cat > "$config_file" << 'STARSHIP_EOF'
+# Starship prompt configuration
+# See: https://starship.rs/config/
+
+# Prompt format — show git info prominently
+format = """
+$hostname\
+$directory\
+$git_branch\
+$git_status\
+$kubernetes\
+$terraform\
+$docker_context\
+$line_break\
+$character"""
+
+# Only show hostname when SSH'd into a remote host
+[hostname]
+ssh_only = true
+format = "[$hostname](bold yellow) "
+trim_at = "."
+
+# Git branch
+[git_branch]
+format = "[$symbol$branch(:$remote_branch)]($style) "
+
+# Git status — show modified, staged, untracked counts
+[git_status]
+format = '([$all_status$ahead_behind]($style) )'
+
+# Directory — show up to 3 levels deep
+[directory]
+truncation_length = 3
+
+# AWS — only show when explicitly set via AWS_PROFILE env var
+[aws]
+format = '[$symbol($profile)(\($region\))]($style) '
+disabled = true
+
+# Kubernetes — only show when a kubeconfig is active
+[kubernetes]
+disabled = false
+format = '[$symbol$context(\($namespace\))]($style) '
+detect_files = []
+
+# Docker — only show inside Docker projects
+[docker_context]
+disabled = false
+
+# Terraform — only show in directories with .tf files
+[terraform]
+disabled = false
+STARSHIP_EOF
+        chown "$(id -u "$TARGET_USER"):$(id -g "$TARGET_USER")" "$config_file" 2>/dev/null || true
+        success "Created Starship config at $config_file"
     fi
 }
 
