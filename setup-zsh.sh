@@ -475,6 +475,7 @@ configure_plugins() {
     local plugins_line="plugins=(${plugin_names[*]})"
 
     if [[ "$DRY_RUN" == true ]]; then
+        echo -e "${YELLOW}[DRY RUN]${NC} Would set ZSH_THEME=\"robbyrussell\" in .zshrc"
         echo -e "${YELLOW}[DRY RUN]${NC} Would set in .zshrc: $plugins_line"
         success "Would configure plugins: ${plugin_names[*]}"
         return 0
@@ -489,6 +490,15 @@ configure_plugins() {
     backup="${zshrc}.bak.$(date +%Y%m%d%H%M%S)"
     run_as_user "$TARGET_USER" "cp '$zshrc' '$backup'"
     info "Backed up .zshrc to $backup"
+
+    # Set robbyrussell theme
+    if grep -q '^ZSH_THEME=' "$zshrc"; then
+        sed -i.tmp 's/^ZSH_THEME=.*/ZSH_THEME="robbyrussell"/' "$zshrc"
+        rm -f "${zshrc}.tmp"
+    else
+        echo 'ZSH_THEME="robbyrussell"' >> "$zshrc"
+    fi
+    success "Set ZSH_THEME=\"robbyrussell\" in $zshrc"
 
     # Replace or append plugins line
     if grep -q '^plugins=' "$zshrc"; then
