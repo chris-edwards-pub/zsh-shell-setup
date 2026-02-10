@@ -99,7 +99,7 @@ This script will:
   4. Install oh-my-zsh (community-driven zsh framework)
   5. Prompt you to select plugins from the list below
   6. Configure your .zshrc with selected plugins
-  7. Optionally install Starship prompt (shows hostname on SSH)
+  7. Add SSH hostname detection to your prompt
   8. Set zsh as your default shell
 
 Options:
@@ -552,152 +552,38 @@ set_default_shell() {
 }
 
 # ---------------------------------------------------------------------------
-# install_starship
+# configure_ssh_prompt
 # ---------------------------------------------------------------------------
 
-install_starship() {
-    echo ""
-    echo -e "${BOLD}=== Starship Prompt ===${NC}"
-    echo ""
-    info "Starship is a modern cross-shell prompt that shows hostname"
-    info "automatically when SSH'd into a remote host."
-    echo ""
-
-    if [[ "$DRY_RUN" == true ]]; then
-        echo -e "${YELLOW}[DRY RUN]${NC} Would prompt to install Starship"
-    else
-        read -rp "Install Starship prompt? (Y/n): " install_star
-        if [[ "$install_star" == [nN]* ]]; then
-            info "Skipping Starship installation"
-            return 0
-        fi
-    fi
-
-    # Install starship binary
-    if command -v starship &>/dev/null; then
-        success "Starship is already installed: $(starship --version | head -1)"
-    else
-        info "Installing Starship..."
-        case "$PKG_MANAGER" in
-            brew) run_cmd brew install starship ;;
-            *)
-                # Use the official installer for Linux distros
-                if [[ "$DRY_RUN" == true ]]; then
-                    echo -e "${YELLOW}[DRY RUN]${NC} curl -sS https://starship.rs/install.sh | sh -s -- -y"
-                else
-                    curl -sS https://starship.rs/install.sh | sh -s -- -y
-                fi
-                ;;
-        esac
-
-        if [[ "$DRY_RUN" == false ]] && ! command -v starship &>/dev/null; then
-            warn "Starship installation failed — skipping configuration"
-            return 0
-        fi
-        success "Starship installed"
-    fi
-
-    # Configure .zshrc for Starship
+configure_ssh_prompt() {
     local zshrc="$TARGET_HOME/.zshrc"
 
     if [[ "$DRY_RUN" == true ]]; then
-        echo -e "${YELLOW}[DRY RUN]${NC} Would set ZSH_THEME=\"\" in $zshrc"
-        echo -e "${YELLOW}[DRY RUN]${NC} Would append 'eval \"\$(starship init zsh)\"' to $zshrc"
-        echo -e "${YELLOW}[DRY RUN]${NC} Would create config at $TARGET_HOME/.config/starship.toml"
-        success "Would configure Starship in $zshrc"
+        echo -e "${YELLOW}[DRY RUN]${NC} Would add SSH hostname detection to $zshrc"
+        success "Would prepend hostname in yellow to prompt on SSH sessions"
         return 0
     fi
 
     if [[ ! -f "$zshrc" ]]; then
-        warn ".zshrc not found at $zshrc — skipping Starship configuration"
+        warn ".zshrc not found at $zshrc — skipping SSH prompt configuration"
         return 0
     fi
 
-    # Disable oh-my-zsh theme (Starship replaces it)
-    if grep -q '^ZSH_THEME=' "$zshrc"; then
-        sed -i.tmp 's/^ZSH_THEME=.*/ZSH_THEME=""/' "$zshrc"
-        rm -f "${zshrc}.tmp"
-        info "Set ZSH_THEME=\"\" (Starship replaces the oh-my-zsh theme)"
+    if grep -q 'SSH_CLIENT.*SSH_TTY.*PROMPT' "$zshrc"; then
+        success "SSH hostname prompt already configured in $zshrc"
+        return 0
     fi
 
-    # Add starship init at the end of .zshrc (if not already present)
-    if ! grep -q 'starship init zsh' "$zshrc"; then
-        {
-            echo ''
-            echo '# Starship prompt (shows hostname on SSH automatically)'
-            # shellcheck disable=SC2016
-            echo 'eval "$(starship init zsh)"'
-        } >> "$zshrc"
-        success "Added Starship init to $zshrc"
-    else
-        success "Starship init already present in $zshrc"
-    fi
+    {
+        echo ''
+        echo '# Show hostname in prompt when connected via SSH'
+        # shellcheck disable=SC2016
+        echo 'if [[ -n "$SSH_CLIENT" ]] || [[ -n "$SSH_TTY" ]]; then'
+        echo "  PROMPT='%{\$fg_bold[yellow]%}%m%{\$reset_color%} '\$PROMPT"
+        echo 'fi'
+    } >> "$zshrc"
 
-    # Create default starship.toml config
-    local config_dir="$TARGET_HOME/.config"
-    local config_file="$config_dir/starship.toml"
-
-    run_as_user "$TARGET_USER" "mkdir -p '$config_dir'"
-
-    if [[ -f "$config_file" ]]; then
-        info "Starship config already exists at $config_file — not overwriting"
-    else
-        cat > "$config_file" << 'STARSHIP_EOF'
-# Starship prompt configuration
-# See: https://starship.rs/config/
-
-# Prompt format — show git info prominently
-format = """
-$hostname\
-$directory\
-$git_branch\
-$git_status\
-$kubernetes\
-$terraform\
-$docker_context\
-$line_break\
-$character"""
-
-# Only show hostname when SSH'd into a remote host
-[hostname]
-ssh_only = true
-format = "[$hostname](bold yellow) "
-trim_at = "."
-
-# Git branch
-[git_branch]
-format = "[$symbol$branch(:$remote_branch)]($style) "
-
-# Git status — show modified, staged, untracked counts
-[git_status]
-format = '([$all_status$ahead_behind]($style) )'
-
-# Directory — show up to 3 levels deep
-[directory]
-truncation_length = 3
-
-# AWS — only show when explicitly set via AWS_PROFILE env var
-[aws]
-format = '[$symbol($profile)(\($region\))]($style) '
-disabled = true
-
-# Kubernetes — only show when a kubeconfig is active
-[kubernetes]
-disabled = false
-format = '[$symbol$context(\($namespace\))]($style) '
-detect_files = []
-
-# Docker — only show inside Docker projects
-[docker_context]
-disabled = false
-
-# Terraform — only show in directories with .tf files
-[terraform]
-disabled = false
-STARSHIP_EOF
-        chown "$(id -u "$TARGET_USER"):$(id -g "$TARGET_USER")" "$config_file" 2>/dev/null || true
-        success "Created Starship config at $config_file"
-    fi
+    success "Added SSH hostname detection to $zshrc"
 }
 
 # ---------------------------------------------------------------------------
@@ -801,42 +687,6 @@ uninstall_zshrc() {
     fi
 }
 
-uninstall_starship() {
-    if ! command -v starship &>/dev/null; then
-        return 0
-    fi
-
-    if [[ "$DRY_RUN" == true ]]; then
-        echo -e "${YELLOW}[DRY RUN]${NC} Would prompt to uninstall Starship"
-        return 0
-    fi
-
-    warn "Starship prompt is installed"
-    read -rp "Uninstall Starship? (y/N): " remove_star
-    if [[ "$remove_star" == [yY]* ]]; then
-        info "Removing Starship..."
-        case "$PKG_MANAGER" in
-            brew) run_cmd brew uninstall starship ;;
-            *)
-                # The official installer puts the binary in /usr/local/bin
-                if [[ -f /usr/local/bin/starship ]]; then
-                    run_cmd sudo rm -f /usr/local/bin/starship
-                fi
-                ;;
-        esac
-        success "Starship removed"
-    else
-        info "Keeping Starship installed"
-    fi
-
-    # Remove starship config if it exists
-    local starship_config="$TARGET_HOME/.config/starship.toml"
-    if [[ -f "$starship_config" ]]; then
-        run_as_user "$TARGET_USER" "rm -f '$starship_config'"
-        info "Removed $starship_config"
-    fi
-}
-
 uninstall_packages() {
     # Warn about /etc/shells entry
     local zsh_path
@@ -907,7 +757,6 @@ main() {
         uninstall_default_shell
         uninstall_ohmyzsh
         uninstall_zshrc
-        uninstall_starship
         uninstall_packages
 
         echo ""
@@ -921,7 +770,7 @@ main() {
         install_ohmyzsh
         prompt_plugins
         configure_plugins
-        install_starship
+        configure_ssh_prompt
         set_default_shell
 
         echo ""

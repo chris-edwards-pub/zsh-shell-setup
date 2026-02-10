@@ -6,7 +6,7 @@ A single-file bash script (`setup-zsh.sh`) that automates installing zsh, oh-my-
 
 ## Version
 
-Current version: **1.1.0** — defined in `setup-zsh.sh` as `readonly VERSION="1.1.0"` (line 4). When bumping the version, update both `setup-zsh.sh` and `README.md`.
+Current version: **1.1.0** — defined in `setup-zsh.sh` as `readonly SCRIPT_VERSION="1.1.0"` (line 4). When bumping the version, update both `setup-zsh.sh` and `README.md`.
 
 ## Repository Structure
 
@@ -50,6 +50,7 @@ CLAUDE.md          This file — project rules and conventions
 - **Plugin load order:** External plugins array order matters — `fzf-tab` must come before `zsh-autosuggestions` and `zsh-syntax-highlighting`
 - **Plugin-specific dependencies:** `fzf-tab` auto-installs `fzf` if not present
 - **Uninstall mode:** `--uninstall` reverses setup; shell change and oh-my-zsh removal are automatic, but zsh/fzf package removal is opt-in (prompted) to avoid breaking other tools
+- **SSH hostname prompt:** Uses a simple `.zshrc` snippet that checks `$SSH_CLIENT`/`$SSH_TTY` and prepends the hostname in yellow — chosen over Starship because it works with oh-my-zsh themes, kube-ps1's `kubeon`/`kubeoff`, and has zero dependencies
 
 ## Testing
 

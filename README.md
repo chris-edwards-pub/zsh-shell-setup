@@ -24,7 +24,7 @@ Automated setup script for zsh and oh-my-zsh with interactive plugin selection.
 4. Installs [oh-my-zsh](https://ohmyz.sh/) (community-driven zsh framework)
 5. Prompts you to select plugins from the catalog below
 6. Configures your `.zshrc` with selected plugins
-7. Optionally installs [Starship](https://starship.rs/) prompt (shows hostname on SSH automatically)
+7. Adds SSH hostname detection to your prompt (shows hostname in yellow when connected via SSH)
 8. Sets zsh as your default shell
 
 ## Usage
