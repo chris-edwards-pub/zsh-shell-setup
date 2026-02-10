@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly VERSION="1.1.0"
+readonly SCRIPT_VERSION="1.1.0"
 
 # Colors
 readonly RED='\033[0;31m'
@@ -698,7 +698,7 @@ uninstall_packages() {
 # ---------------------------------------------------------------------------
 
 main() {
-    echo -e "${BOLD}zsh + oh-my-zsh Setup Script v${VERSION}${NC}"
+    echo -e "${BOLD}zsh + oh-my-zsh Setup Script v${SCRIPT_VERSION}${NC}"
     echo "============================================"
     echo ""
 
