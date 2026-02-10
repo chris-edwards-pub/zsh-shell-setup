@@ -1,6 +1,6 @@
 # zsh-shell-setup
 
-> **Version 1.0.0**
+> **Version 1.1.0**
 
 Automated setup script for zsh and oh-my-zsh with interactive plugin selection.
 
@@ -45,12 +45,32 @@ sudo ./setup-zsh.sh --user deploy
 ./setup-zsh.sh --help
 ```
 
+### Uninstall
+
+```bash
+# Uninstall for current user (revert to bash)
+./setup-zsh.sh --uninstall
+
+# Uninstall for a specific user
+./setup-zsh.sh --uninstall --user chris
+
+# Preview what uninstall would do
+./setup-zsh.sh --uninstall --dry-run
+```
+
+The uninstall will:
+1. Switch the default shell back to `/bin/bash`
+2. Remove the `~/.oh-my-zsh` directory (including all external plugins)
+3. Restore `.zshrc` from backup if available, or remove it
+4. Optionally prompt to uninstall `fzf` and `zsh` packages
+
 ### Options
 
 | Flag | Description |
 |------|-------------|
 | `-u`, `--user <username>` | Target user (default: current user) |
 | `-n`, `--dry-run` | Show what would be done without making changes |
+| `--uninstall` | Uninstall zsh setup and revert to bash |
 | `-h`, `--help` | Show help message with full plugin descriptions |
 
 ## Available Plugins

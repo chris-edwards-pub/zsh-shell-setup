@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly VERSION="1.0.0"
+readonly VERSION="1.1.0"
 
 # Colors
 readonly RED='\033[0;31m'
@@ -44,6 +44,7 @@ TARGET_HOME=""
 OS_TYPE=""
 PKG_MANAGER=""
 DRY_RUN=false
+UNINSTALL_MODE=false
 SELECTED_PLUGINS=()
 
 # ---------------------------------------------------------------------------
@@ -100,6 +101,7 @@ This script will:
 Options:
   -u, --user <username>   Target user (default: current user)
   -n, --dry-run           Show what would be done without making changes
+      --uninstall         Uninstall zsh setup and revert to bash
   -h, --help              Show this help message
 
 Supported operating systems:
@@ -131,11 +133,18 @@ Available plugins (external, cloned via git):
 Note: fzf-tab must load before zsh-autosuggestions and zsh-syntax-highlighting.
       The script handles this ordering automatically.
 
+Uninstall mode (--uninstall):
+  Reverts the setup by switching the default shell back to bash,
+  removing oh-my-zsh and its plugins, and restoring any .zshrc backup.
+  Does NOT remove zsh or fzf packages by default (prompted separately).
+
 Examples:
   $(basename "$0")                  # Install for current user
   $(basename "$0") -u chris         # Install for user 'chris'
   $(basename "$0") --dry-run        # Preview what would happen
   sudo $(basename "$0") -u deploy   # Install for another user (requires root)
+  $(basename "$0") --uninstall      # Uninstall and revert to bash
+  $(basename "$0") --uninstall -n   # Preview what uninstall would do
 EOF
 }
 
@@ -153,6 +162,10 @@ parse_args() {
                 ;;
             -n|--dry-run)
                 DRY_RUN=true
+                shift
+                ;;
+            --uninstall)
+                UNINSTALL_MODE=true
                 shift
                 ;;
             -h|--help)
@@ -532,6 +545,155 @@ set_default_shell() {
 }
 
 # ---------------------------------------------------------------------------
+# Uninstall functions
+# ---------------------------------------------------------------------------
+
+confirm_uninstall() {
+    if [[ "$DRY_RUN" == true ]]; then
+        warn "Dry-run mode: showing what uninstall would do"
+        return 0
+    fi
+
+    echo ""
+    warn "This will remove oh-my-zsh, its plugins, and revert '$TARGET_USER' to bash."
+    read -rp "Are you sure you want to proceed? (y/N): " confirm
+    if [[ "$confirm" != [yY]* ]]; then
+        info "Uninstall cancelled."
+        exit 0
+    fi
+}
+
+uninstall_default_shell() {
+    local bash_path="/bin/bash"
+
+    # Get current shell for target user
+    local current_shell=""
+    if [[ "$OS_TYPE" == "macos" ]]; then
+        current_shell="$(dscl . -read "/Users/$TARGET_USER" UserShell 2>/dev/null | awk '{print $2}' || true)"
+    else
+        current_shell="$(getent passwd "$TARGET_USER" 2>/dev/null | cut -d: -f7 || true)"
+    fi
+
+    if [[ "$current_shell" == "$bash_path" ]]; then
+        success "Default shell is already bash for '$TARGET_USER'"
+        return 0
+    fi
+
+    info "Changing default shell to $bash_path for '$TARGET_USER'..."
+    if [[ "$(whoami)" == "$TARGET_USER" ]]; then
+        run_cmd chsh -s "$bash_path"
+    else
+        run_cmd sudo chsh -s "$bash_path" "$TARGET_USER"
+    fi
+
+    success "Default shell changed to $bash_path for '$TARGET_USER'"
+}
+
+uninstall_ohmyzsh() {
+    local ohmyzsh_dir="$TARGET_HOME/.oh-my-zsh"
+
+    if [[ "$DRY_RUN" == false && ! -d "$ohmyzsh_dir" ]]; then
+        info "oh-my-zsh directory not found at $ohmyzsh_dir, nothing to remove"
+        return 0
+    fi
+
+    info "Removing oh-my-zsh directory: $ohmyzsh_dir"
+    run_as_user "$TARGET_USER" "rm -rf '$ohmyzsh_dir'"
+    success "Removed $ohmyzsh_dir (including all external plugins)"
+}
+
+uninstall_zshrc() {
+    local zshrc="$TARGET_HOME/.zshrc"
+
+    if [[ "$DRY_RUN" == false && ! -f "$zshrc" ]]; then
+        info "No .zshrc found at $zshrc, nothing to restore"
+        return 0
+    fi
+
+    # Find the most recent .zshrc backup
+    local latest_backup
+    latest_backup="$(find "$TARGET_HOME" -maxdepth 1 -name '.zshrc.bak.*' -print0 2>/dev/null \
+        | xargs -0 ls -1t 2>/dev/null | head -1 || true)"
+
+    if [[ -n "$latest_backup" ]]; then
+        info "Found .zshrc backup: $latest_backup"
+        if [[ "$DRY_RUN" == true ]]; then
+            echo -e "${YELLOW}[DRY RUN]${NC} Would restore $latest_backup -> $zshrc"
+            return 0
+        fi
+        read -rp "Restore .zshrc from backup? (Y/n): " restore
+        if [[ "$restore" != [nN]* ]]; then
+            run_as_user "$TARGET_USER" "cp '$latest_backup' '$zshrc'"
+            success "Restored .zshrc from $latest_backup"
+        else
+            run_as_user "$TARGET_USER" "rm -f '$zshrc'"
+            success "Removed $zshrc (backup preserved at $latest_backup)"
+        fi
+    else
+        if [[ "$DRY_RUN" == true ]]; then
+            echo -e "${YELLOW}[DRY RUN]${NC} Would remove $zshrc (no backup found)"
+            return 0
+        fi
+        info "No .zshrc backup found; removing oh-my-zsh-generated .zshrc"
+        run_as_user "$TARGET_USER" "rm -f '$zshrc'"
+        success "Removed $zshrc"
+    fi
+}
+
+uninstall_packages() {
+    # Warn about /etc/shells entry
+    local zsh_path
+    zsh_path="$(command -v zsh 2>/dev/null || true)"
+    if [[ -n "$zsh_path" && -f /etc/shells ]] && grep -qx "$zsh_path" /etc/shells; then
+        warn "$zsh_path is listed in /etc/shells"
+        warn "Skipping removal — other users may depend on this entry."
+        info "To remove manually: sudo sed -i.tmp '\\|^${zsh_path}\$|d' /etc/shells"
+    fi
+
+    if [[ "$DRY_RUN" == true ]]; then
+        echo -e "${YELLOW}[DRY RUN]${NC} Would prompt to optionally uninstall fzf and zsh packages"
+        return 0
+    fi
+
+    # Optionally uninstall fzf
+    if command -v fzf &>/dev/null; then
+        warn "fzf is still installed (may have been installed for fzf-tab plugin)"
+        read -rp "Uninstall fzf? (y/N): " remove_fzf
+        if [[ "$remove_fzf" == [yY]* ]]; then
+            info "Removing fzf..."
+            case "$PKG_MANAGER" in
+                brew) run_cmd brew uninstall fzf ;;
+                apt)  run_cmd sudo apt-get remove -y fzf ;;
+                yum)  run_cmd sudo yum remove -y fzf ;;
+                dnf)  run_cmd sudo dnf remove -y fzf ;;
+            esac
+            success "fzf removed"
+        else
+            info "Keeping fzf installed"
+        fi
+    fi
+
+    # Optionally uninstall zsh
+    if command -v zsh &>/dev/null; then
+        warn "zsh is still installed on the system"
+        warn "Other users or scripts may depend on zsh. Only remove if you are certain."
+        read -rp "Uninstall zsh? (y/N): " remove_zsh
+        if [[ "$remove_zsh" == [yY]* ]]; then
+            info "Removing zsh..."
+            case "$PKG_MANAGER" in
+                brew) run_cmd brew uninstall zsh ;;
+                apt)  run_cmd sudo apt-get remove -y zsh ;;
+                yum)  run_cmd sudo yum remove -y zsh ;;
+                dnf)  run_cmd sudo dnf remove -y zsh ;;
+            esac
+            success "zsh removed"
+        else
+            info "Keeping zsh installed"
+        fi
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
 
@@ -542,18 +704,33 @@ main() {
 
     parse_args "$@"
     detect_os
-    check_prerequisites
-    install_zsh
-    install_ohmyzsh
-    prompt_plugins
-    configure_plugins
-    set_default_shell
 
-    echo ""
-    echo "============================================"
-    success "Setup complete for user '$TARGET_USER'!"
-    info "Log out and back in, or run: exec zsh"
-    echo "============================================"
+    if [[ "$UNINSTALL_MODE" == true ]]; then
+        confirm_uninstall
+        uninstall_default_shell
+        uninstall_ohmyzsh
+        uninstall_zshrc
+        uninstall_packages
+
+        echo ""
+        echo "============================================"
+        success "Uninstall complete for user '$TARGET_USER'!"
+        info "Log out and back in to return to bash."
+        echo "============================================"
+    else
+        check_prerequisites
+        install_zsh
+        install_ohmyzsh
+        prompt_plugins
+        configure_plugins
+        set_default_shell
+
+        echo ""
+        echo "============================================"
+        success "Setup complete for user '$TARGET_USER'!"
+        info "Log out and back in, or run: exec zsh"
+        echo "============================================"
+    fi
 }
 
 main "$@"

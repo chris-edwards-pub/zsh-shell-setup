@@ -6,7 +6,7 @@ A single-file bash script (`setup-zsh.sh`) that automates installing zsh, oh-my-
 
 ## Version
 
-Current version: **1.0.0** — defined in `setup-zsh.sh` as `readonly VERSION="1.0.0"` (line 4). When bumping the version, update both `setup-zsh.sh` and `README.md`.
+Current version: **1.1.0** — defined in `setup-zsh.sh` as `readonly VERSION="1.1.0"` (line 4). When bumping the version, update both `setup-zsh.sh` and `README.md`.
 
 ## Repository Structure
 
@@ -49,6 +49,7 @@ CLAUDE.md          This file — project rules and conventions
 - **Permissions check:** Fails early if installing for another user without root
 - **Plugin load order:** External plugins array order matters — `fzf-tab` must come before `zsh-autosuggestions` and `zsh-syntax-highlighting`
 - **Plugin-specific dependencies:** `fzf-tab` auto-installs `fzf` if not present
+- **Uninstall mode:** `--uninstall` reverses setup; shell change and oh-my-zsh removal are automatic, but zsh/fzf package removal is opt-in (prompted) to avoid breaking other tools
 
 ## Testing
 
@@ -56,3 +57,4 @@ CLAUDE.md          This file — project rules and conventions
 - `shellcheck setup-zsh.sh` — lint check (must be zero warnings)
 - `./setup-zsh.sh --help` — verify help output shows all plugins
 - `./setup-zsh.sh --dry-run` — full end-to-end dry run (no system changes)
+- `./setup-zsh.sh --uninstall --dry-run` — dry run of uninstall mode
