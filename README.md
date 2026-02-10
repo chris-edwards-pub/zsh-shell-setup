@@ -1,6 +1,6 @@
 # zsh-shell-setup
 
-> **Version 1.1.0**
+> **Version 1.2.0**
 
 Automated setup script for zsh and oh-my-zsh with interactive plugin selection.
 

@@ -6,7 +6,7 @@ A single-file bash script (`setup-zsh.sh`) that automates installing zsh, oh-my-
 
 ## Version
 
-Current version: **1.1.0** — defined in `setup-zsh.sh` as `readonly SCRIPT_VERSION="1.1.0"` (line 4). When bumping the version, update both `setup-zsh.sh` and `README.md`.
+Current version: **1.2.0** — defined in `setup-zsh.sh` as `readonly SCRIPT_VERSION="1.2.0"` (line 4). When bumping the version, update both `setup-zsh.sh` and `README.md`.
 
 ## Repository Structure
 
