@@ -1,0 +1,16 @@
+# macOS
+.DS_Store
+._*
+
+# Editors
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Backup files created by the script
+*.bak.*
+
+# Temporary sed files
+*.tmp
