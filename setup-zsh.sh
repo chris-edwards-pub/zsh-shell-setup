@@ -500,10 +500,31 @@ configure_plugins() {
     fi
     success "Set ZSH_THEME=\"robbyrussell\" in $zshrc"
 
-    # Replace or append plugins line
+    # Replace or append plugins block (handles both single-line and multi-line)
     if grep -q '^plugins=' "$zshrc"; then
-        sed -i.tmp "s/^plugins=(.*)/$plugins_line/" "$zshrc"
-        rm -f "${zshrc}.tmp"
+        # Read file, skip lines inside plugins=( ... ), write replacement
+        local tmpfile="${zshrc}.tmp"
+        local in_block=false
+        while IFS= read -r line; do
+            if [[ "$line" =~ ^plugins=\( ]]; then
+                echo "$plugins_line"
+                # If closing paren is on the same line, we're done
+                if [[ "$line" == *")" ]]; then
+                    continue
+                fi
+                in_block=true
+                continue
+            fi
+            if [[ "$in_block" == true ]]; then
+                # Skip lines until we find the closing paren
+                if [[ "$line" == *")" ]]; then
+                    in_block=false
+                fi
+                continue
+            fi
+            echo "$line"
+        done < "$zshrc" > "$tmpfile"
+        mv "$tmpfile" "$zshrc"
     else
         echo "$plugins_line" >> "$zshrc"
     fi
