@@ -99,7 +99,8 @@ This script will:
   4. Install oh-my-zsh (community-driven zsh framework)
   5. Prompt you to select plugins from the list below
   6. Configure your .zshrc with selected plugins
-  7. Set zsh as your default shell
+  7. Optionally install Starship prompt (shows hostname on SSH)
+  8. Set zsh as your default shell
 
 Options:
   -u, --user <username>   Target user (default: current user)
@@ -551,6 +552,88 @@ set_default_shell() {
 }
 
 # ---------------------------------------------------------------------------
+# install_starship
+# ---------------------------------------------------------------------------
+
+install_starship() {
+    echo ""
+    echo -e "${BOLD}=== Starship Prompt ===${NC}"
+    echo ""
+    info "Starship is a modern cross-shell prompt that shows hostname"
+    info "automatically when SSH'd into a remote host."
+    echo ""
+
+    if [[ "$DRY_RUN" == true ]]; then
+        echo -e "${YELLOW}[DRY RUN]${NC} Would prompt to install Starship"
+    else
+        read -rp "Install Starship prompt? (Y/n): " install_star
+        if [[ "$install_star" == [nN]* ]]; then
+            info "Skipping Starship installation"
+            return 0
+        fi
+    fi
+
+    # Install starship binary
+    if command -v starship &>/dev/null; then
+        success "Starship is already installed: $(starship --version | head -1)"
+    else
+        info "Installing Starship..."
+        case "$PKG_MANAGER" in
+            brew) run_cmd brew install starship ;;
+            *)
+                # Use the official installer for Linux distros
+                if [[ "$DRY_RUN" == true ]]; then
+                    echo -e "${YELLOW}[DRY RUN]${NC} curl -sS https://starship.rs/install.sh | sh -s -- -y"
+                else
+                    curl -sS https://starship.rs/install.sh | sh -s -- -y
+                fi
+                ;;
+        esac
+
+        if [[ "$DRY_RUN" == false ]] && ! command -v starship &>/dev/null; then
+            warn "Starship installation failed — skipping configuration"
+            return 0
+        fi
+        success "Starship installed"
+    fi
+
+    # Configure .zshrc for Starship
+    local zshrc="$TARGET_HOME/.zshrc"
+
+    if [[ "$DRY_RUN" == true ]]; then
+        echo -e "${YELLOW}[DRY RUN]${NC} Would set ZSH_THEME=\"\" in $zshrc"
+        echo -e "${YELLOW}[DRY RUN]${NC} Would append 'eval \"\$(starship init zsh)\"' to $zshrc"
+        success "Would configure Starship in $zshrc"
+        return 0
+    fi
+
+    if [[ ! -f "$zshrc" ]]; then
+        warn ".zshrc not found at $zshrc — skipping Starship configuration"
+        return 0
+    fi
+
+    # Disable oh-my-zsh theme (Starship replaces it)
+    if grep -q '^ZSH_THEME=' "$zshrc"; then
+        sed -i.tmp 's/^ZSH_THEME=.*/ZSH_THEME=""/' "$zshrc"
+        rm -f "${zshrc}.tmp"
+        info "Set ZSH_THEME=\"\" (Starship replaces the oh-my-zsh theme)"
+    fi
+
+    # Add starship init at the end of .zshrc (if not already present)
+    if ! grep -q 'starship init zsh' "$zshrc"; then
+        {
+            echo ''
+            echo '# Starship prompt (shows hostname on SSH automatically)'
+            # shellcheck disable=SC2016
+            echo 'eval "$(starship init zsh)"'
+        } >> "$zshrc"
+        success "Added Starship init to $zshrc"
+    else
+        success "Starship init already present in $zshrc"
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # Uninstall functions
 # ---------------------------------------------------------------------------
 
@@ -651,6 +734,42 @@ uninstall_zshrc() {
     fi
 }
 
+uninstall_starship() {
+    if ! command -v starship &>/dev/null; then
+        return 0
+    fi
+
+    if [[ "$DRY_RUN" == true ]]; then
+        echo -e "${YELLOW}[DRY RUN]${NC} Would prompt to uninstall Starship"
+        return 0
+    fi
+
+    warn "Starship prompt is installed"
+    read -rp "Uninstall Starship? (y/N): " remove_star
+    if [[ "$remove_star" == [yY]* ]]; then
+        info "Removing Starship..."
+        case "$PKG_MANAGER" in
+            brew) run_cmd brew uninstall starship ;;
+            *)
+                # The official installer puts the binary in /usr/local/bin
+                if [[ -f /usr/local/bin/starship ]]; then
+                    run_cmd sudo rm -f /usr/local/bin/starship
+                fi
+                ;;
+        esac
+        success "Starship removed"
+    else
+        info "Keeping Starship installed"
+    fi
+
+    # Remove starship config if it exists
+    local starship_config="$TARGET_HOME/.config/starship.toml"
+    if [[ -f "$starship_config" ]]; then
+        run_as_user "$TARGET_USER" "rm -f '$starship_config'"
+        info "Removed $starship_config"
+    fi
+}
+
 uninstall_packages() {
     # Warn about /etc/shells entry
     local zsh_path
@@ -721,6 +840,7 @@ main() {
         uninstall_default_shell
         uninstall_ohmyzsh
         uninstall_zshrc
+        uninstall_starship
         uninstall_packages
 
         echo ""
@@ -734,6 +854,7 @@ main() {
         install_ohmyzsh
         prompt_plugins
         configure_plugins
+        install_starship
         set_default_shell
 
         echo ""
