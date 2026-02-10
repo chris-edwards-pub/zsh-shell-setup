@@ -27,6 +27,9 @@ BUNDLED_PLUGINS=(
     "aws|AWS CLI completions and aliases|all"
     "kubectl|Kubectl completions and aliases|all"
     "kube-ps1|Kubernetes context/namespace in prompt|all"
+    "command-not-found|Suggest packages when command not found|all"
+    "helm|Helm completions and aliases|all"
+    "terraform|Terraform completions and aliases|all"
     "macos|macOS-specific utilities|darwin"
 )
 
@@ -122,6 +125,9 @@ Available plugins (bundled with oh-my-zsh):
   aws                     AWS CLI command completions and aliases
   kubectl                 Kubectl command completions and aliases
   kube-ps1                Show Kubernetes context/namespace in prompt
+  command-not-found       Suggest packages when a command is not found
+  helm                    Helm command completions and aliases
+  terraform               Terraform command completions and aliases
   macos                   macOS utilities (ofd, cdf, etc.) [macOS only]
 
 Available plugins (external, cloned via git):

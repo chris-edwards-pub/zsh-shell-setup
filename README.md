@@ -91,6 +91,9 @@ The uninstall will:
 | [aws](https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/aws) | AWS CLI command completions and aliases |
 | [kubectl](https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/kubectl) | Kubectl command completions and aliases |
 | [kube-ps1](https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/kube-ps1) | Show Kubernetes context/namespace in prompt |
+| [command-not-found](https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/command-not-found) | Suggest packages when a command is not found |
+| [helm](https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/helm) | Helm command completions and aliases |
+| [terraform](https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/terraform) | Terraform command completions and aliases |
 | [macos](https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/macos) | macOS utilities (`ofd`, `cdf`, etc.) — macOS only |
 
 ### External (cloned via git)
