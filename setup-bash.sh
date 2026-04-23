@@ -14,6 +14,7 @@ readonly NC='\033[0m'
 readonly BASH_IT_REPO_URL="https://github.com/Bash-it/bash-it.git"
 readonly KUBE_PS1_REPO_URL="https://github.com/jonmosco/kube-ps1.git"
 readonly KUBECTX_REPO_URL="https://github.com/ahmetb/kubectx.git"
+readonly BLESH_REPO_URL="https://github.com/akinomyoga/ble.sh.git"
 
 # Candidate components: "type|name|description|os_filter"
 # type: alias, completion, plugin
@@ -40,6 +41,7 @@ COMPONENT_CANDIDATES=(
 # External repos selected during prompt_components
 INSTALL_KUBE_PS1=false
 INSTALL_KUBECTX=false
+INSTALL_BLESH=false
 
 TARGET_USER=""
 TARGET_HOME=""
@@ -55,6 +57,7 @@ SELECTED_COMPONENTS=()
 EXTERNAL_CANDIDATES=(
     "external|kube-ps1|Kubernetes context/namespace in prompt (kubeon/kubeoff)|all"
     "external|kubectx|Fast context (kubectx) and namespace (kubens) switcher|all"
+    "external|ble.sh|Inline history autosuggestions and syntax highlighting for bash|all"
 )
 
 info()    { echo -e "${BLUE}[INFO]${NC} $*"; }
@@ -440,6 +443,8 @@ prompt_components() {
             INSTALL_KUBE_PS1=true
         elif [[ "$ctype" == "external" && "$cname" == "kubectx" ]]; then
             INSTALL_KUBECTX=true
+        elif [[ "$ctype" == "external" && "$cname" == "ble.sh" ]]; then
+            INSTALL_BLESH=true
         else
             filtered+=("$entry")
         fi
@@ -453,6 +458,7 @@ prompt_components() {
     done
     [[ "$INSTALL_KUBE_PS1" == true ]] && summary+=("external:kube-ps1")
     [[ "$INSTALL_KUBECTX" == true ]] && summary+=("external:kubectx/kubens")
+    [[ "$INSTALL_BLESH"   == true ]] && summary+=("external:ble.sh")
     info "Selected components: ${summary[*]}"
 }
 
@@ -531,6 +537,7 @@ ${kubectx_block}
 if [[ -n "\$SSH_CLIENT" || -n "\$SSH_TTY" ]]; then
   PS1='\[\e[1;33m\]\h\[\e[0m\] '"\$PS1"
 fi
+${blesh_block}
 # <<< setup-bash.sh <<<
 EOF
 }
@@ -758,6 +765,49 @@ uninstall_kubectx() {
     success "Removed $kubectx_dir"
 }
 
+install_blesh() {
+    local blesh_src_dir="$TARGET_HOME/.local/src/blesh"
+    local blesh_out_dir="$TARGET_HOME/.local/share/blesh"
+
+    if [[ "$INSTALL_BLESH" != true ]]; then
+        return 0
+    fi
+
+    if [[ -d "$blesh_src_dir" ]]; then
+        info "Updating ble.sh..."
+        run_as_user "$TARGET_USER" "cd '$blesh_src_dir' && git pull --quiet"
+    else
+        info "Cloning ble.sh..."
+        run_as_user "$TARGET_USER" "git clone --depth=1 '$BLESH_REPO_URL' '$blesh_src_dir'"
+    fi
+
+    if [[ "$DRY_RUN" == false && ! -d "$blesh_src_dir" ]]; then
+        fatal "ble.sh clone failed"
+    fi
+
+    info "Building and installing ble.sh..."
+    run_as_user "$TARGET_USER" "make -C '$blesh_src_dir' install PREFIX='$TARGET_HOME/.local'"
+
+    if [[ "$DRY_RUN" == false && ! -f "$blesh_out_dir/ble.sh" ]]; then
+        fatal "ble.sh build failed"
+    fi
+
+    success "ble.sh installed at $blesh_out_dir"
+}
+
+uninstall_blesh() {
+    local blesh_src_dir="$TARGET_HOME/.local/src/blesh"
+    local blesh_out_dir="$TARGET_HOME/.local/share/blesh"
+
+    if [[ "$DRY_RUN" == false && ! -d "$blesh_src_dir" && ! -d "$blesh_out_dir" ]]; then
+        return 0
+    fi
+
+    info "Removing ble.sh..."
+    run_as_user "$TARGET_USER" "rm -rf '$blesh_src_dir' '$blesh_out_dir'"
+    success "Removed ble.sh"
+}
+
 uninstall_bash_it() {
     local bash_it_dir="$TARGET_HOME/.bash_it"
 
@@ -812,6 +862,7 @@ main() {
         uninstall_bash_it
         uninstall_kube_ps1
         uninstall_kubectx
+        uninstall_blesh
         uninstall_bashrc_block
 
         echo ""
@@ -829,6 +880,7 @@ main() {
     prompt_components
     install_kube_ps1
     install_kubectx
+    install_blesh
     configure_bashrc
     set_default_shell
 
