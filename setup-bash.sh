@@ -498,6 +498,11 @@ build_managed_block() {
         kubectx_block=$'\n# kubectx/kubens: fast context and namespace switching\nKUBECTX_DIR="$HOME/.kubectx"\nif [[ -d "$KUBECTX_DIR" ]]; then\n  export PATH="$KUBECTX_DIR:$PATH"\nfi'
     fi
 
+    local blesh_block=""
+    if [[ "$INSTALL_BLESH" == true ]]; then
+        blesh_block=$'\n# ble.sh: inline history autosuggestions and syntax highlighting.\n# IMPORTANT: must be sourced LAST — after bash-it and all other prompt setup —\n# so it can wrap readline without conflicting with PROMPT_COMMAND chains.\nif [[ -f "$HOME/.local/share/blesh/ble.sh" ]]; then\n  source "$HOME/.local/share/blesh/ble.sh"\nfi'
+    fi
+
     cat <<EOF
 # >>> setup-bash.sh >>>
 # Managed by setup-bash.sh. Changes in this block may be overwritten.
@@ -805,6 +810,7 @@ uninstall_blesh() {
 
     info "Removing ble.sh..."
     run_as_user "$TARGET_USER" "rm -rf '$blesh_src_dir' '$blesh_out_dir'"
+
     success "Removed ble.sh"
 }
 
