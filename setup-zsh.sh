@@ -554,10 +554,19 @@ set_default_shell() {
     if [[ "$OS_TYPE" == "macos" ]]; then
         current_shell="$(dscl . -read "/Users/$TARGET_USER" UserShell 2>/dev/null | awk '{print $2}' || true)"
     else
+        # Fall back to $SHELL for SSSD/AD users where getent may return a different
+        # path (e.g. /bin/zsh vs /usr/bin/zsh due to usrmerge on RHEL).
         current_shell="$(getent passwd "$TARGET_USER" 2>/dev/null | cut -d: -f7 || true)"
+        if [[ -z "$current_shell" && "$(whoami)" == "$TARGET_USER" ]]; then
+            current_shell="$SHELL"
+        fi
     fi
 
-    if [[ "$current_shell" == "$zsh_path" ]]; then
+    local current_shell_real zsh_path_real
+    current_shell_real="$(readlink -f "$current_shell" 2>/dev/null || echo "$current_shell")"
+    zsh_path_real="$(readlink -f "$zsh_path" 2>/dev/null || echo "$zsh_path")"
+
+    if [[ "$current_shell_real" == "$zsh_path_real" ]]; then
         success "zsh is already the default shell for '$TARGET_USER'"
         return 0
     fi
@@ -645,9 +654,16 @@ uninstall_default_shell() {
         current_shell="$(dscl . -read "/Users/$TARGET_USER" UserShell 2>/dev/null | awk '{print $2}' || true)"
     else
         current_shell="$(getent passwd "$TARGET_USER" 2>/dev/null | cut -d: -f7 || true)"
+        if [[ -z "$current_shell" && "$(whoami)" == "$TARGET_USER" ]]; then
+            current_shell="$SHELL"
+        fi
     fi
 
-    if [[ "$current_shell" == "$bash_path" ]]; then
+    local current_shell_real bash_path_real
+    current_shell_real="$(readlink -f "$current_shell" 2>/dev/null || echo "$current_shell")"
+    bash_path_real="$(readlink -f "$bash_path" 2>/dev/null || echo "$bash_path")"
+
+    if [[ "$current_shell_real" == "$bash_path_real" ]]; then
         success "Default shell is already bash for '$TARGET_USER'"
         return 0
     fi

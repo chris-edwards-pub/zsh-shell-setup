@@ -46,6 +46,24 @@ sudo ./setup-zsh.sh --user deploy
 ./setup-zsh.sh --help
 ```
 
+### Bash Setup Script
+
+This repository also includes a Bash-focused installer:
+
+```bash
+# Install Bash + Bash-it for current user
+./setup-bash.sh
+
+# Install for a specific user
+sudo ./setup-bash.sh --user deploy
+
+# Preview changes
+./setup-bash.sh --dry-run
+
+# Uninstall Bash-it setup
+./setup-bash.sh --uninstall
+```
+
 ### Uninstall
 
 ```bash
