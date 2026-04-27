@@ -533,11 +533,14 @@ KUBE_PS1_BLOCK
         blesh_block=$'\n# ble.sh: inline history autosuggestions and syntax highlighting.\n# IMPORTANT: must be sourced LAST — after bash-it and all other prompt setup —\n# so it can wrap readline without conflicting with PROMPT_COMMAND chains.\nif [[ -f "$HOME/.local/share/blesh/ble.sh" ]]; then\n  source "$HOME/.local/share/blesh/ble.sh"\nfi'
     fi
 
+    local pure_theme_block=""
+    pure_theme_block=$'\n# pure theme tweak: show only the current directory name (\\W) instead of full path (\\w).\nif [[ "${BASH_IT_THEME:-}" == "pure" ]] && declare -F pure_prompt >/dev/null 2>&1; then\n  pure_prompt() {\n    local ps_host="${bold_blue?}\\h${normal?}"\n    local ps_user="${green?}\\u${normal?}"\n    local ps_user_mark="${green?} ➜  ${normal?}"\n    local ps_root="${red?}\\u${red?}"\n    local ps_root_mark="${red?} \\$ ${normal?}"\n    local ps_path="${yellow?}\\W${normal?}"\n    local virtualenv_prompt scm_prompt\n    virtualenv_prompt="$(virtualenv_prompt)"\n    scm_prompt="$(scm_prompt)"\n    case "${EUID:-$UID}" in\n      0)\n        ps_user_mark="${ps_root_mark}"\n        ps_user="${ps_root}"\n        ;;\n    esac\n    PS1="${virtualenv_prompt}${ps_user}@${ps_host}${scm_prompt}:${ps_path}${ps_user_mark}"\n  }\nfi'
+
     cat <<EOF
 # >>> setup-bash.sh >>>
 # Managed by setup-bash.sh. Changes in this block may be overwritten.
 export BASH_IT="\$HOME/.bash_it"
-export BASH_IT_THEME='easy'
+export BASH_IT_THEME='pure'
 
 bash_it_aliases=( ${aliases} )
 bash_it_completions=( ${completions} )
@@ -546,6 +549,7 @@ bash_it_plugins=( ${plugins} )
 if [[ -f "\$BASH_IT/bash_it.sh" ]]; then
   source "\$BASH_IT/bash_it.sh"
 fi
+${pure_theme_block}
 ${kube_ps1_block}
 ${kubectx_block}
 ${blesh_block}
