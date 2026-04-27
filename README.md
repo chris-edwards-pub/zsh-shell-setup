@@ -1,4 +1,4 @@
-# zsh-shell-setup
+# zsh-shell-setup 
 
 > **Version 1.2.0**
 

@@ -490,7 +490,7 @@ build_managed_block() {
 
     local kube_ps1_block=""
     if [[ "$INSTALL_KUBE_PS1" == true ]]; then
-        kube_ps1_block=$'\n# kube-ps1: Kubernetes context/namespace in prompt (kubeon/kubeoff to toggle)\nKUBE_PS1_DIR="$HOME/.kube-ps1"\nif [[ -f "$KUBE_PS1_DIR/kube-ps1.sh" ]]; then\n  source "$KUBE_PS1_DIR/kube-ps1.sh"\n  PS1=\'$(kube_ps1) \'"$PS1"\nfi'
+        kube_ps1_block=$'\n# kube-ps1: Kubernetes context/namespace in prompt (kubeon/kubeoff to toggle)\nKUBE_PS1_DIR="$HOME/.kube-ps1"\nif [[ -f "$KUBE_PS1_DIR/kube-ps1.sh" ]]; then\n  source "$KUBE_PS1_DIR/kube-ps1.sh"\n\n  # Bash-it refreshes PS1 via PROMPT_COMMAND, so prepend kube-ps1 from a prompt hook.\n  __setup_bash_last_kube_segment=""\n  __setup_bash_kube_ps1_prompt() {\n    local kube_segment\n\n    if [[ -n "$__setup_bash_last_kube_segment" ]]; then\n      PS1="${PS1#"$__setup_bash_last_kube_segment "}"\n    fi\n\n    kube_segment="$(kube_ps1 2>/dev/null)"\n    # Normalize leading breaks/spaces from the theme so kubeon/kubeoff both\n    # keep the prompt on a single clean line.\n    while [[ "${PS1:0:1}" == $'\\n' ]]; do\n      PS1="${PS1:1}"\n    done\n    PS1="${PS1#\\\\n }"\n    PS1="${PS1#\\\\n}"\n    PS1="${PS1# }"\n\n    if [[ -n "$kube_segment" ]]; then\n      PS1="$kube_segment $PS1"\n    fi\n\n    __setup_bash_last_kube_segment="$kube_segment"\n  }\n\n  PROMPT_COMMAND="${PROMPT_COMMAND:+${PROMPT_COMMAND}; }__setup_bash_kube_ps1_prompt"\nfi'
     fi
 
     local kubectx_block=""
