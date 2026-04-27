@@ -499,10 +499,14 @@ if [[ -f "$KUBE_PS1_DIR/kube-ps1.sh" ]]; then
 
     __setup_bash_last_kube_segment=""
     __setup_bash_kube_ps1_prompt() {
-        local kube_segment
+        local kube_segment kube_prefix
 
         if [[ -n "$__setup_bash_last_kube_segment" ]]; then
-            PS1="${PS1#"$__setup_bash_last_kube_segment "}"
+            kube_prefix="${__setup_bash_last_kube_segment} "
+            PS1="${PS1#"$kube_prefix"}"
+            if [[ -n "${__setup_bash_prompt_marker_raw:-}" ]]; then
+                PS1="${PS1/${__setup_bash_prompt_marker_raw}${kube_prefix}/${__setup_bash_prompt_marker_raw}}"
+            fi
         fi
 
         if declare -F _kube_ps1_prompt_update >/dev/null 2>&1; then
@@ -511,7 +515,12 @@ if [[ -f "$KUBE_PS1_DIR/kube-ps1.sh" ]]; then
 
         kube_segment="$(kube_ps1 2>/dev/null)"
         if [[ -n "$kube_segment" ]]; then
-            PS1="$kube_segment $PS1"
+            kube_prefix="${kube_segment} "
+            if [[ -n "${__setup_bash_prompt_marker_raw:-}" ]] && [[ "$PS1" == *"${__setup_bash_prompt_marker_raw}"* ]]; then
+                PS1="${PS1/${__setup_bash_prompt_marker_raw}/${__setup_bash_prompt_marker_raw}${kube_prefix}}"
+            else
+                PS1="$kube_prefix$PS1"
+            fi
         fi
 
         __setup_bash_last_kube_segment="$kube_segment"
@@ -534,7 +543,7 @@ KUBE_PS1_BLOCK
     fi
 
     local pure_theme_block=""
-    pure_theme_block=$'\n# pure theme tweak: show only the current directory name (\\W) instead of full path (\\w).\nif [[ "${BASH_IT_THEME:-}" == "pure" ]] && declare -F pure_prompt >/dev/null 2>&1; then\n  pure_prompt() {\n    local ps_host="${bold_blue?}\\h${normal?}"\n    local ps_user="${green?}\\u${normal?}"\n    local ps_user_mark="${green?} ➜  ${normal?}"\n    local ps_root="${red?}\\u${red?}"\n    local ps_root_mark="${red?} \\$ ${normal?}"\n    local ps_path="${yellow?}\\W${normal?}"\n    local virtualenv_prompt scm_prompt\n    virtualenv_prompt="$(virtualenv_prompt)"\n    scm_prompt="$(scm_prompt)"\n    case "${EUID:-$UID}" in\n      0)\n        ps_user_mark="${ps_root_mark}"\n        ps_user="${ps_root}"\n        ;;\n    esac\n    PS1="${virtualenv_prompt}${ps_user}@${ps_host}${scm_prompt}:${ps_path}${ps_user_mark}"\n  }\nfi'
+    pure_theme_block=$'\n# pure theme tweak: show only the current directory name (\\W) instead of full path (\\w).\nif [[ "${BASH_IT_THEME:-}" == "pure" ]] && declare -F pure_prompt >/dev/null 2>&1; then\n  __setup_bash_prompt_marker_raw="➜  "\n  pure_prompt() {\n    local ps_host="${bold_blue?}\\h${normal?}"\n    local ps_user="${green?}\\u${normal?}"\n    local ps_user_mark="${green?}${__setup_bash_prompt_marker_raw}${normal?}"\n    local ps_root="${red?}\\u${red?}"\n    local ps_root_mark="${red?} # ${normal?}"\n    local ps_path="${yellow?}\\W${normal?}"\n    local virtualenv_prompt scm_prompt\n    virtualenv_prompt="$(virtualenv_prompt)"\n    scm_prompt="$(scm_prompt)"\n    case "${EUID:-$UID}" in\n      0)\n        ps_user_mark="${ps_root_mark}"\n        ps_user="${ps_root}"\n        ;;\n    esac\n    PS1="${ps_user_mark}${virtualenv_prompt}${ps_user}@${ps_host}${scm_prompt}:${ps_path} "\n  }\nfi'
 
     cat <<EOF
 # >>> setup-bash.sh >>>
