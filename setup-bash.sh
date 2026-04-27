@@ -488,10 +488,40 @@ build_managed_block() {
         esac
     done
 
-    local kube_ps1_block=""
-    if [[ "$INSTALL_KUBE_PS1" == true ]]; then
-        kube_ps1_block=$'\n# kube-ps1: Kubernetes context/namespace in prompt (kubeon/kubeoff to toggle)\nKUBE_PS1_DIR="$HOME/.kube-ps1"\nif [[ -f "$KUBE_PS1_DIR/kube-ps1.sh" ]]; then\n  source "$KUBE_PS1_DIR/kube-ps1.sh"\n\n  # Bash-it refreshes PS1 via PROMPT_COMMAND, so prepend kube-ps1 from a prompt hook.\n  __setup_bash_last_kube_segment=""\n  __setup_bash_kube_ps1_prompt() {\n    local kube_segment\n\n    if [[ -n "$__setup_bash_last_kube_segment" ]]; then\n      PS1="${PS1#"$__setup_bash_last_kube_segment "}"\n    fi\n\n    kube_segment="$(kube_ps1 2>/dev/null)"\n    # Normalize leading breaks/spaces from the theme so kubeon/kubeoff both\n    # keep the prompt on a single clean line.\n    while [[ "${PS1:0:1}" == $'\\n' ]]; do\n      PS1="${PS1:1}"\n    done\n    PS1="${PS1#\\\\n }"\n    PS1="${PS1#\\\\n}"\n    PS1="${PS1# }"\n\n    if [[ -n "$kube_segment" ]]; then\n      PS1="$kube_segment $PS1"\n    fi\n\n    __setup_bash_last_kube_segment="$kube_segment"\n  }\n\n  PROMPT_COMMAND="${PROMPT_COMMAND:+${PROMPT_COMMAND}; }__setup_bash_kube_ps1_prompt"\nfi'
-    fi
+        local kube_ps1_block=""
+        if [[ "$INSTALL_KUBE_PS1" == true ]]; then
+                kube_ps1_block="$(cat <<'KUBE_PS1_BLOCK'
+# kube-ps1: kubeon/kubeoff toggle for context/namespace in prompt
+KUBE_PS1_DIR="$HOME/.kube-ps1"
+if [[ -f "$KUBE_PS1_DIR/kube-ps1.sh" ]]; then
+    source "$KUBE_PS1_DIR/kube-ps1.sh"
+    KUBE_PS1_ENABLED=off
+
+    __setup_bash_last_kube_segment=""
+    __setup_bash_kube_ps1_prompt() {
+        local kube_segment
+
+        if [[ -n "$__setup_bash_last_kube_segment" ]]; then
+            PS1="${PS1#"$__setup_bash_last_kube_segment "}"
+        fi
+
+        if declare -F _kube_ps1_prompt_update >/dev/null 2>&1; then
+            _kube_ps1_prompt_update >/dev/null 2>&1 || true
+        fi
+
+        kube_segment="$(kube_ps1 2>/dev/null)"
+        if [[ -n "$kube_segment" ]]; then
+            PS1="$kube_segment $PS1"
+        fi
+
+        __setup_bash_last_kube_segment="$kube_segment"
+    }
+
+    PROMPT_COMMAND="${PROMPT_COMMAND:+${PROMPT_COMMAND}; }__setup_bash_kube_ps1_prompt"
+fi
+KUBE_PS1_BLOCK
+)"
+        fi
 
     local kubectx_block=""
     if [[ "$INSTALL_KUBECTX" == true ]]; then
@@ -507,16 +537,7 @@ build_managed_block() {
 # >>> setup-bash.sh >>>
 # Managed by setup-bash.sh. Changes in this block may be overwritten.
 export BASH_IT="\$HOME/.bash_it"
-export BASH_IT_THEME='barbuk'
-# BarbUk prompt segments — ansible removed (shows /etc/ansible/ansible.cfg on systems
-# where Ansible is installed system-wide, which is just noise on a managed host).
-# git-upstream-remote-logo removed — requires a Nerd Font to render correctly;
-# without one it shows a garbled glyph in the terminal.
-# Full segment list: git-upstream-remote-logo ssh path scm python_venv uv ruby node
-#                   bun docker pre_commit terraform mysql ansible cloud duration exit
-export BARBUK_PROMPT="ssh path scm docker terraform cloud duration exit"
-# Show short hostname instead of in SSH prompt.
-export BARBUK_HOST_INFO="short"
+export BASH_IT_THEME='easy'
 
 bash_it_aliases=( ${aliases} )
 bash_it_completions=( ${completions} )
@@ -525,23 +546,8 @@ bash_it_plugins=( ${plugins} )
 if [[ -f "\$BASH_IT/bash_it.sh" ]]; then
   source "\$BASH_IT/bash_it.sh"
 fi
-
-# Shorten the prompt path to show only the current directory name (\W = basename,
-# ~ for home) instead of the full path (\w = full path).
-# BarbUk renders the path via __path_prompt() which hardcodes \w.  We re-declare
-# the function here (after bash-it loads) to swap \w for \W without touching the
-# theme file itself, so theme updates won't silently revert this.
-# If this stops working after a bash-it update, check __path_prompt() in
-# ~/.bash_it/themes/barbuk/barbuk.theme.bash and verify it still uses \w.
-if declare -f __path_prompt > /dev/null 2>&1; then
-  eval "\$(declare -f __path_prompt | sed 's/\\\\w/\\\\W/g')"
-fi
 ${kube_ps1_block}
 ${kubectx_block}
-# Show hostname in yellow when connected via SSH.
-if [[ -n "\$SSH_CLIENT" || -n "\$SSH_TTY" ]]; then
-  PS1='\[\e[1;33m\]\h\[\e[0m\] '"\$PS1"
-fi
 ${blesh_block}
 # <<< setup-bash.sh <<<
 EOF
