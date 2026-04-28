@@ -542,6 +542,66 @@ KUBE_PS1_BLOCK
         blesh_block=$'\n# ble.sh: inline history autosuggestions and syntax highlighting.\n# IMPORTANT: must be sourced LAST — after bash-it and all other prompt setup —\n# so it can wrap readline without conflicting with PROMPT_COMMAND chains.\nif [[ -f "$HOME/.local/share/blesh/ble.sh" ]]; then\n  source "$HOME/.local/share/blesh/ble.sh"\nfi'
     fi
 
+    local proxy_block=""
+    proxy_block="$(cat <<'PROXY_BLOCK'
+# Proxy helpers:
+# - Define PROXY_HTTP_PROXY / PROXY_HTTPS_PROXY with your own values in ~/.bashrc
+#   above this managed block, or edit these defaults if needed.
+# - proxyoff caches current values so proxyon can restore them later.
+: "${PROXY_HTTP_PROXY:=}"
+: "${PROXY_HTTPS_PROXY:=}"
+
+__setup_bash_saved_http_proxy="${__setup_bash_saved_http_proxy:-}"
+__setup_bash_saved_https_proxy="${__setup_bash_saved_https_proxy:-}"
+
+proxyon() {
+    local current_http current_https http_value https_value
+
+    current_http="${HTTP_PROXY:-${http_proxy:-}}"
+    current_https="${HTTPS_PROXY:-${https_proxy:-}}"
+
+    http_value="${current_http:-${__setup_bash_saved_http_proxy:-$PROXY_HTTP_PROXY}}"
+    https_value="${current_https:-${__setup_bash_saved_https_proxy:-$PROXY_HTTPS_PROXY}}"
+
+    if [[ -z "$http_value" || -z "$https_value" ]]; then
+        echo "[WARN] Proxy values are not set. Define PROXY_HTTP_PROXY and PROXY_HTTPS_PROXY first."
+        return 1
+    fi
+
+    export HTTP_PROXY="$http_value"
+    export http_proxy="$http_value"
+    export HTTPS_PROXY="$https_value"
+    export https_proxy="$https_value"
+}
+
+proxyoff() {
+    local current_http current_https
+
+    current_http="${HTTP_PROXY:-${http_proxy:-}}"
+    current_https="${HTTPS_PROXY:-${https_proxy:-}}"
+
+    if [[ -z "$current_http" && -z "$current_https" ]]; then
+        echo "[WARN] Proxy values are not currently set."
+        return 0
+    fi
+
+    [[ -n "$current_http" ]] && __setup_bash_saved_http_proxy="$current_http"
+    [[ -n "$current_https" ]] && __setup_bash_saved_https_proxy="$current_https"
+
+    unset HTTP_PROXY
+    unset HTTPS_PROXY
+    unset http_proxy
+    unset https_proxy
+}
+
+checkproxy() {
+    if ! env | grep -i 'proxy'; then
+        echo "[WARN] No proxy environment variables are set."
+    fi
+}
+PROXY_BLOCK
+)"
+
     local pure_theme_block=""
     pure_theme_block=$'\n# pure theme tweak: show only the current directory name (\\W) instead of full path (\\w).\nif [[ "${BASH_IT_THEME:-}" == "pure" ]] && declare -F pure_prompt >/dev/null 2>&1; then\n  __setup_bash_prompt_marker_raw="➜  "\n  pure_prompt() {\n    local ps_host="${bold_blue?}\\h${normal?}"\n    local ps_user="${green?}\\u${normal?}"\n    local ps_user_mark="${green?}${__setup_bash_prompt_marker_raw}${normal?}"\n    local ps_root="${red?}\\u${red?}"\n    local ps_root_mark="${red?} # ${normal?}"\n    local ps_path="${yellow?}\\W${normal?}"\n    local virtualenv_prompt scm_prompt\n    virtualenv_prompt="$(virtualenv_prompt)"\n    scm_prompt="$(scm_prompt)"\n    case "${EUID:-$UID}" in\n      0)\n        ps_user_mark="${ps_root_mark}"\n        ps_user="${ps_root}"\n        ;;\n    esac\n    PS1="${ps_user_mark}${virtualenv_prompt}${ps_user}@${ps_host}${scm_prompt}:${ps_path} "\n  }\nfi'
 
@@ -561,6 +621,7 @@ fi
 ${pure_theme_block}
 ${kube_ps1_block}
 ${kubectx_block}
+${proxy_block}
 ${blesh_block}
 # <<< setup-bash.sh <<<
 EOF
@@ -601,7 +662,8 @@ backup_and_fix_owner() {
     fi
 
     if [[ -f "$file_path" ]]; then
-        local backup="${file_path}.bak.$(date +%Y%m%d%H%M%S)"
+        local backup
+        backup="${file_path}.bak.$(date +%Y%m%d%H%M%S)"
         cp "$file_path" "$backup"
         success "Backed up $file_path to $backup"
     fi
