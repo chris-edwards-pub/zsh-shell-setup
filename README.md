@@ -64,6 +64,29 @@ sudo ./setup-bash.sh --user deploy
 ./setup-bash.sh --uninstall
 ```
 
+### Bash Proxy Helpers
+
+When you use `setup-bash.sh`, the managed `.bashrc` block includes helper functions:
+
+- `proxyon`: Enables proxy env vars from current values, saved values, or configured defaults
+- `proxyoff`: Unsets proxy env vars and caches the last values for reuse
+- `checkproxy`: Shows current proxy-related environment variables
+
+Define your proxy defaults in `.bashrc` above the managed block:
+
+```bash
+PROXY_HTTP_PROXY="http://your-http-proxy:port"
+PROXY_HTTPS_PROXY="http://your-https-proxy:port"
+```
+
+Then use:
+
+```bash
+proxyon
+proxyoff
+checkproxy
+```
+
 ### Uninstall
 
 ```bash
