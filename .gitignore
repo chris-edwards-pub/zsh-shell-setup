@@ -17,3 +17,5 @@
 
 # Temporary sed files
 *.tmp
+
+airgap-bash-bundle*

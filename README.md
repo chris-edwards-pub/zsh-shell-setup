@@ -62,6 +62,40 @@ sudo ./setup-bash.sh --user deploy
 
 # Uninstall Bash-it setup
 ./setup-bash.sh --uninstall
+
+# Build air-gap bundle in current directory
+./setup-bash.sh --build-airgap-bundle
+
+# Build air-gap bundle in a specific location
+./setup-bash.sh --build-airgap-bundle --output /tmp
+```
+
+### Air-Gap Bundle Builder (Bash)
+
+Use `setup-bash.sh --build-airgap-bundle` to create a tarball that includes:
+
+- `setup-bash.sh`
+- `repositories/*.tar.gz` for latest `bash-it`, `kube-ps1`, `kubectx`, and `ble.sh`
+- `manifests/manifest.json` (source URLs + commit SHAs)
+- `manifests/checksums.sha256`
+
+Behavior details:
+
+- The final tarball defaults to your current working directory.
+- Extracting the tarball creates a dedicated top-level folder (no file spill into current directory).
+- Running `./setup-bash.sh` from that extracted folder automatically installs from bundled `repositories/*.tar.gz` (no GitHub clone needed).
+- In bundle mode, seeing `Installing ... from bundled source` confirms repository content is coming from local tarballs.
+- `ble.sh` may print a long local build log during install; this is expected and does not indicate network cloning.
+- `--output <path>` lets you choose a different directory or file path.
+- Temporary clone/staging data is created under `/tmp` and removed automatically.
+- Use `--keep-temp` to keep temporary files for inspection.
+- The repository working tree is not used for bundle artifacts.
+
+Example:
+
+```bash
+./setup-bash.sh --build-airgap-bundle --output /tmp
+tar -tzf /tmp/airgap-bash-bundle-<timestamp>.tar.gz | head
 ```
 
 ### Bash Proxy Helpers
