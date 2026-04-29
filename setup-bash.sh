@@ -15,6 +15,9 @@ readonly BASH_IT_REPO_URL="https://github.com/Bash-it/bash-it.git"
 readonly KUBE_PS1_REPO_URL="https://github.com/jonmosco/kube-ps1.git"
 readonly KUBECTX_REPO_URL="https://github.com/ahmetb/kubectx.git"
 readonly BLESH_REPO_URL="https://github.com/akinomyoga/ble.sh.git"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
+readonly BUNDLE_REPOSITORIES_DIR="$SCRIPT_DIR/repositories"
 
 # Candidate components: "type|name|description|os_filter"
 # type: alias, completion, plugin
@@ -49,6 +52,12 @@ OS_TYPE=""
 PKG_MANAGER=""
 DRY_RUN=false
 UNINSTALL_MODE=false
+BUNDLE_MODE=false
+BUNDLE_OUTPUT=""
+KEEP_TEMP=false
+TEMP_ROOT=""
+BUNDLE_CLONES_DIR=""
+BUNDLE_STAGING_DIR=""
 
 AVAILABLE_COMPONENTS=()
 SELECTED_COMPONENTS=()
@@ -58,6 +67,14 @@ EXTERNAL_CANDIDATES=(
     "external|kube-ps1|Kubernetes context/namespace in prompt (kubeon/kubeoff)|all"
     "external|kubectx|Fast context (kubectx) and namespace (kubens) switcher|all"
     "external|ble.sh|Inline history autosuggestions and syntax highlighting for bash|all"
+)
+
+# Bundle sources: "name|repo_url"
+BUNDLE_SOURCE_REPOS=(
+    "bash-it|$BASH_IT_REPO_URL"
+    "kube-ps1|$KUBE_PS1_REPO_URL"
+    "kubectx|$KUBECTX_REPO_URL"
+    "ble.sh|$BLESH_REPO_URL"
 )
 
 info()    { echo -e "${BLUE}[INFO]${NC} $*"; }
@@ -92,6 +109,228 @@ run_as_user() {
     fi
 }
 
+find_bundled_repo_archive() {
+    local repo_name="$1"
+    local archive_path="$BUNDLE_REPOSITORIES_DIR/${repo_name}.tar.gz"
+
+    if [[ -f "$archive_path" ]]; then
+        printf '%s' "$archive_path"
+        return 0
+    fi
+
+    return 1
+}
+
+install_repo_from_bundle() {
+    local repo_name="$1"
+    local dest_dir="$2"
+    local label="$3"
+    local archive_path=""
+
+    archive_path="$(find_bundled_repo_archive "$repo_name" || true)"
+    if [[ -z "$archive_path" ]]; then
+        return 1
+    fi
+
+    info "Installing $label from bundled source: $archive_path"
+    run_as_user "$TARGET_USER" "rm -rf '$dest_dir' && mkdir -p '$dest_dir' && tar -xzf '$archive_path' -C '$dest_dir'"
+    success "$label installed from bundled source"
+    return 0
+}
+
+cleanup_temp_dirs() {
+    if [[ -z "$TEMP_ROOT" || ! -d "$TEMP_ROOT" ]]; then
+        return 0
+    fi
+
+    if [[ "$KEEP_TEMP" == true ]]; then
+        info "Keeping temporary bundle workspace: $TEMP_ROOT"
+        return 0
+    fi
+
+    rm -rf "$TEMP_ROOT"
+}
+
+json_escape() {
+    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+resolve_bundle_output_path() {
+    local ts output
+    ts="$(date +%Y%m%d%H%M%S)"
+
+    if [[ -z "$BUNDLE_OUTPUT" ]]; then
+        printf '%s/airgap-bash-bundle-%s.tar.gz' "$PWD" "$ts"
+        return 0
+    fi
+
+    if [[ -d "$BUNDLE_OUTPUT" ]]; then
+        printf '%s/airgap-bash-bundle-%s.tar.gz' "$BUNDLE_OUTPUT" "$ts"
+        return 0
+    fi
+
+    output="$BUNDLE_OUTPUT"
+    if [[ "$output" == */ ]]; then
+        mkdir -p "$output"
+        printf '%sairgap-bash-bundle-%s.tar.gz' "$output" "$ts"
+        return 0
+    fi
+
+    printf '%s' "$output"
+}
+
+write_airgap_readme() {
+    local readme_path="$1"
+
+    cat > "$readme_path" <<'EOF'
+# Air-Gap Bash Setup Bundle
+
+This bundle contains:
+- `setup-bash.sh`
+- `repositories/*.tar.gz` source archives for required upstream repositories
+- `manifests/manifest.json` with source URLs and commit SHAs
+- `manifests/checksums.sha256` integrity checksums
+
+## Usage in a disconnected environment
+
+1. Extract the bundle:
+   `tar -xzf airgap-bash-bundle-<timestamp>.tar.gz`
+2. Review source metadata and checksums:
+   `cat manifests/manifest.json`
+   `sha256sum -c manifests/checksums.sha256`
+3. Run the installer script as usual:
+   `./setup-bash.sh --help`
+   `./setup-bash.sh`
+
+Note: this bundle includes source artifacts only (no OS package payloads).
+EOF
+}
+
+write_manifest_json() {
+    local metadata_file="$1"
+    local manifest_file="$2"
+    local generated_at
+    local first=true
+    local line=""
+    local name=""
+    local repo_url=""
+    local commit_sha=""
+    local fetched_at=""
+    local archive_path=""
+
+    generated_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+    {
+        printf '{\n'
+        printf '  "generated_at": "%s",\n' "$generated_at"
+        printf '  "script_version": "%s",\n' "$SCRIPT_VERSION"
+        printf '  "sources": [\n'
+
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            IFS='|' read -r name repo_url commit_sha fetched_at archive_path <<< "$line"
+            if [[ "$first" == true ]]; then
+                first=false
+            else
+                printf ',\n'
+            fi
+
+            printf '    {"name":"%s","repo_url":"%s","commit_sha":"%s","fetched_at":"%s","archive":"%s"}' \
+                "$(json_escape "$name")" \
+                "$(json_escape "$repo_url")" \
+                "$(json_escape "$commit_sha")" \
+                "$(json_escape "$fetched_at")" \
+                "$(json_escape "$archive_path")"
+        done < "$metadata_file"
+
+        printf '\n'
+        printf '  ]\n'
+        printf '}\n'
+    } > "$manifest_file"
+}
+
+fetch_bundle_repo() {
+    local repo_name="$1"
+    local repo_url="$2"
+    local metadata_file="$3"
+    local clone_dir archive_file commit_sha fetched_at
+
+    clone_dir="$BUNDLE_CLONES_DIR/$repo_name"
+    archive_file="$BUNDLE_STAGING_DIR/repositories/${repo_name}.tar.gz"
+
+    info "Fetching latest $repo_name from $repo_url"
+    git clone --depth=1 --recurse-submodules "$repo_url" "$clone_dir" >/dev/null 2>&1 || fatal "Failed to clone $repo_name from $repo_url"
+
+    commit_sha="$(git -C "$clone_dir" rev-parse HEAD 2>/dev/null || true)"
+    [[ -n "$commit_sha" ]] || fatal "Failed to determine commit SHA for $repo_name"
+
+    tar -C "$clone_dir" -czf "$archive_file" . || fatal "Failed to package $repo_name source archive"
+
+    fetched_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf '%s|%s|%s|%s|%s\n' "$repo_name" "$repo_url" "$commit_sha" "$fetched_at" "repositories/${repo_name}.tar.gz" >> "$metadata_file"
+}
+
+build_airgap_bundle() {
+    local metadata_file
+    local manifest_file
+    local checksums_file
+    local bundle_readme
+    local final_bundle
+    local bundle_root_name
+    local package_dir
+    local entry=""
+    local repo_name=""
+    local repo_url=""
+    local summary_line=""
+
+    TEMP_ROOT="$(mktemp -d /tmp/setup-bash-airgap.XXXXXX)"
+    BUNDLE_CLONES_DIR="$TEMP_ROOT/clones"
+    BUNDLE_STAGING_DIR="$TEMP_ROOT/staging"
+    mkdir -p "$BUNDLE_CLONES_DIR" "$BUNDLE_STAGING_DIR/repositories" "$BUNDLE_STAGING_DIR/manifests"
+
+    trap cleanup_temp_dirs EXIT
+
+    metadata_file="$BUNDLE_STAGING_DIR/manifests/sources.tsv"
+    manifest_file="$BUNDLE_STAGING_DIR/manifests/manifest.json"
+    checksums_file="$BUNDLE_STAGING_DIR/manifests/checksums.sha256"
+    bundle_readme="$BUNDLE_STAGING_DIR/AIRGAP-README.md"
+
+    : > "$metadata_file"
+
+    info "Building air-gap bundle in temporary workspace: $TEMP_ROOT"
+
+    for entry in "${BUNDLE_SOURCE_REPOS[@]}"; do
+        IFS='|' read -r repo_name repo_url <<< "$entry"
+        fetch_bundle_repo "$repo_name" "$repo_url" "$metadata_file"
+    done
+
+    cp "$0" "$BUNDLE_STAGING_DIR/setup-bash.sh" || fatal "Failed to copy installer script into bundle"
+    write_airgap_readme "$bundle_readme"
+    write_manifest_json "$metadata_file" "$manifest_file"
+
+    (
+        cd "$BUNDLE_STAGING_DIR"
+        find . -type f ! -path './manifests/checksums.sha256' -print0 | sort -z | xargs -0 sha256sum
+    ) > "$checksums_file"
+
+    final_bundle="$(resolve_bundle_output_path)"
+    bundle_root_name="$(basename "$final_bundle" .tar.gz)"
+    package_dir="$TEMP_ROOT/package/$bundle_root_name"
+
+    mkdir -p "$package_dir"
+    cp -R "$BUNDLE_STAGING_DIR/." "$package_dir/"
+
+    mkdir -p "$(dirname "$final_bundle")"
+    tar -C "$TEMP_ROOT/package" -czf "$final_bundle" "$bundle_root_name" || fatal "Failed to create final bundle archive"
+
+    echo ""
+    success "Air-gap bundle created: $final_bundle"
+    info "Included sources:"
+    while IFS= read -r summary_line || [[ -n "$summary_line" ]]; do
+        IFS='|' read -r repo_name _repo_url commit_sha _fetched_at _archive_path <<< "$summary_line"
+        echo "  - $repo_name ($commit_sha)"
+    done < "$metadata_file"
+}
+
 usage() {
     cat <<EOF
 Usage: $(basename "$0") [OPTIONS]
@@ -112,6 +351,9 @@ Options:
   -u, --user <username>   Target user (default: current user)
   -n, --dry-run           Show what would happen without making changes
       --uninstall         Remove Bash-it setup and managed .bashrc block
+    --build-airgap-bundle Build air-gap tarball with latest source archives
+    --output <path>      Output path for bundle tarball (default: current directory)
+    --keep-temp          Keep temporary staging directories for inspection
   -h, --help              Show this help message
 
 Supported operating systems:
@@ -125,6 +367,8 @@ Examples:
   $(basename "$0") --dry-run
   sudo $(basename "$0") --user deploy
   $(basename "$0") --uninstall
+    $(basename "$0") --build-airgap-bundle
+    $(basename "$0") --build-airgap-bundle --output /tmp
 EOF
 }
 
@@ -144,6 +388,19 @@ parse_args() {
                 UNINSTALL_MODE=true
                 shift
                 ;;
+            --build-airgap-bundle)
+                BUNDLE_MODE=true
+                shift
+                ;;
+            --output)
+                [[ -n "${2:-}" ]] || fatal "Option $1 requires a path argument"
+                BUNDLE_OUTPUT="$2"
+                shift 2
+                ;;
+            --keep-temp)
+                KEEP_TEMP=true
+                shift
+                ;;
             -h|--help)
                 usage
                 exit 0
@@ -153,6 +410,26 @@ parse_args() {
                 ;;
         esac
     done
+
+    if [[ "$BUNDLE_MODE" == true ]]; then
+        if [[ "$UNINSTALL_MODE" == true ]]; then
+            fatal "--build-airgap-bundle cannot be used with --uninstall"
+        fi
+        if [[ "$DRY_RUN" == true ]]; then
+            fatal "--build-airgap-bundle cannot be used with --dry-run"
+        fi
+
+        if [[ -n "$TARGET_USER" ]]; then
+            warn "--user is ignored when building an air-gap bundle"
+        fi
+
+        info "Air-gap bundle mode enabled"
+        return 0
+    fi
+
+    if [[ -n "$BUNDLE_OUTPUT" || "$KEEP_TEMP" == true ]]; then
+        fatal "--output and --keep-temp require --build-airgap-bundle"
+    fi
 
     if [[ -z "$TARGET_USER" ]]; then
         TARGET_USER="$(whoami)"
@@ -298,7 +575,9 @@ install_bash_it() {
     fi
 
     info "Installing Bash-it for user '$TARGET_USER'"
-    run_as_user "$TARGET_USER" "git clone --depth=1 '$BASH_IT_REPO_URL' '$bash_it_dir'"
+    if ! install_repo_from_bundle "bash-it" "$bash_it_dir" "Bash-it"; then
+        run_as_user "$TARGET_USER" "git clone --depth=1 '$BASH_IT_REPO_URL' '$bash_it_dir'"
+    fi
 
     if [[ "$DRY_RUN" == false && ! -d "$bash_it_dir" ]]; then
         fatal "Bash-it installation failed"
@@ -790,7 +1069,9 @@ install_kube_ps1() {
         return 0
     fi
 
-    if [[ -d "$kube_ps1_dir" ]]; then
+    if install_repo_from_bundle "kube-ps1" "$kube_ps1_dir" "kube-ps1"; then
+        :
+    elif [[ -d "$kube_ps1_dir" ]]; then
         info "Updating kube-ps1..."
         run_as_user "$TARGET_USER" "cd '$kube_ps1_dir' && git pull --quiet"
     else
@@ -812,7 +1093,9 @@ install_kubectx() {
         return 0
     fi
 
-    if [[ -d "$kubectx_dir" ]]; then
+    if install_repo_from_bundle "kubectx" "$kubectx_dir" "kubectx/kubens"; then
+        :
+    elif [[ -d "$kubectx_dir" ]]; then
         info "Updating kubectx/kubens..."
         run_as_user "$TARGET_USER" "cd '$kubectx_dir' && git pull --quiet"
     else
@@ -859,7 +1142,9 @@ install_blesh() {
         return 0
     fi
 
-    if [[ -d "$blesh_src_dir" ]]; then
+    if install_repo_from_bundle "ble.sh" "$blesh_src_dir" "ble.sh"; then
+        :
+    elif [[ -d "$blesh_src_dir" ]]; then
         info "Updating ble.sh..."
         run_as_user "$TARGET_USER" "cd '$blesh_src_dir' && git pull --quiet"
     else
@@ -942,6 +1227,12 @@ main() {
     echo "==========================================="
 
     parse_args "$@"
+
+    if [[ "$BUNDLE_MODE" == true ]]; then
+        build_airgap_bundle
+        return 0
+    fi
+
     detect_os
 
     if [[ "$UNINSTALL_MODE" == true ]]; then
