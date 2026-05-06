@@ -816,9 +816,64 @@ KUBE_PS1_BLOCK
         kubectx_block=$'\n# kubectx/kubens: fast context and namespace switching\nKUBECTX_DIR="$HOME/.kubectx"\nif [[ -d "$KUBECTX_DIR" ]]; then\n  export PATH="$KUBECTX_DIR:$PATH"\nfi'
     fi
 
+        local history_block=""
+        history_block="$(cat <<'HISTORY_BLOCK'
+# History dedupe for cleaner Up/Down navigation.
+# - ignoredups: skip adjacent duplicate commands.
+# - erasedups: remove older duplicates when a command is re-run.
+case ":${HISTCONTROL:-}:" in
+    (*:ignoredups:*) ;;
+    (*) HISTCONTROL="${HISTCONTROL:+$HISTCONTROL:}ignoredups" ;;
+esac
+case ":${HISTCONTROL}:" in
+    (*:erasedups:*) ;;
+    (*) HISTCONTROL="${HISTCONTROL:+$HISTCONTROL:}erasedups" ;;
+esac
+export HISTCONTROL
+
+# One-time manual cleanup for existing duplicate history entries.
+# Keeps the most recent occurrence of each command and reloads history.
+historydedupe() {
+    local histfile backup tmpfile
+
+    histfile="${HISTFILE:-$HOME/.bash_history}"
+    if [[ ! -f "$histfile" ]]; then
+        echo "[WARN] History file not found: $histfile"
+        return 1
+    fi
+
+    backup="${histfile}.bak.$(date +%Y%m%d%H%M%S)"
+    tmpfile="${histfile}.tmp.$$"
+
+    cp "$histfile" "$backup" || {
+        echo "[ERROR] Failed to create backup: $backup"
+        return 1
+    }
+
+    awk '{ lines[NR]=$0 } END { for (i=NR;i>=1;i--) if (!seen[lines[i]]++) out[++n]=lines[i]; for (i=n;i>=1;i--) print out[i] }' "$histfile" > "$tmpfile" || {
+        rm -f "$tmpfile"
+        echo "[ERROR] Failed to dedupe history"
+        return 1
+    }
+
+    mv "$tmpfile" "$histfile" || {
+        rm -f "$tmpfile"
+        echo "[ERROR] Failed to update history file"
+        return 1
+    }
+
+    history -c
+    history -r "$histfile" 2>/dev/null || history -r
+
+    echo "[OK] History deduped: $histfile"
+    echo "[OK] Backup created: $backup"
+}
+HISTORY_BLOCK
+)"
+
     local blesh_block=""
     if [[ "$INSTALL_BLESH" == true ]]; then
-        blesh_block=$'\n# ble.sh: inline history autosuggestions and syntax highlighting.\n# IMPORTANT: must be sourced LAST — after bash-it and all other prompt setup —\n# so it can wrap readline without conflicting with PROMPT_COMMAND chains.\nif [[ -f "$HOME/.local/share/blesh/ble.sh" ]]; then\n  source "$HOME/.local/share/blesh/ble.sh"\n\n  # Prefix history search on arrows: type part of a command, then Up/Down\n  # to cycle through history entries that start with that prefix.\n  ble-bind -m emacs -f up history-search-backward\n  ble-bind -m emacs -f down history-search-forward\n  ble-bind -m vi_imap -f up history-search-backward\n  ble-bind -m vi_imap -f down history-search-forward\nfi'
+        blesh_block=$'\n# ble.sh: inline history autosuggestions and syntax highlighting.\n# IMPORTANT: must be sourced LAST — after bash-it and all other prompt setup —\n# so it can wrap readline without conflicting with PROMPT_COMMAND chains.\nif [[ -f "$HOME/.local/share/blesh/ble.sh" ]]; then\n  source "$HOME/.local/share/blesh/ble.sh"\n\n  # Partial history recall on Up/Down (matches typed text in history entries).\n  # immediate-accept avoids needing a second Enter after selecting a match.\n  ble-bind -m emacs -f up "history-substring-search-backward immediate-accept:hide-status"\n  ble-bind -m emacs -f down "history-substring-search-forward immediate-accept:hide-status"\n  ble-bind -m vi_imap -f up "history-substring-search-backward immediate-accept:hide-status"\n  ble-bind -m vi_imap -f down "history-substring-search-forward immediate-accept:hide-status"\n\n  # Keep strict prefix-search available on dedicated keys when needed.\n  ble-bind -m emacs -f "C-x p" "history-search-backward hide-status"\n  ble-bind -m emacs -f "C-x n" "history-search-forward hide-status"\nfi'
     fi
 
     local completion_finalize_block=""
@@ -952,6 +1007,7 @@ bash_it_plugins=( ${plugins} )
 if [[ -f "\$BASH_IT/bash_it.sh" ]]; then
   source "\$BASH_IT/bash_it.sh"
 fi
+${history_block}
 ${pure_theme_block}
 ${kube_ps1_block}
 ${kubectx_block}
