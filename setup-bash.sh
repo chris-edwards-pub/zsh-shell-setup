@@ -818,8 +818,63 @@ KUBE_PS1_BLOCK
 
     local blesh_block=""
     if [[ "$INSTALL_BLESH" == true ]]; then
-        blesh_block=$'\n# ble.sh: inline history autosuggestions and syntax highlighting.\n# IMPORTANT: must be sourced LAST — after bash-it and all other prompt setup —\n# so it can wrap readline without conflicting with PROMPT_COMMAND chains.\nif [[ -f "$HOME/.local/share/blesh/ble.sh" ]]; then\n  source "$HOME/.local/share/blesh/ble.sh"\nfi'
+        blesh_block=$'\n# ble.sh: inline history autosuggestions and syntax highlighting.\n# IMPORTANT: must be sourced LAST — after bash-it and all other prompt setup —\n# so it can wrap readline without conflicting with PROMPT_COMMAND chains.\nif [[ -f "$HOME/.local/share/blesh/ble.sh" ]]; then\n  source "$HOME/.local/share/blesh/ble.sh"\n\n  # Prefix history search on arrows: type part of a command, then Up/Down\n  # to cycle through history entries that start with that prefix.\n  ble-bind -m emacs -f up history-search-backward\n  ble-bind -m emacs -f down history-search-forward\n  ble-bind -m vi_imap -f up history-search-backward\n  ble-bind -m vi_imap -f down history-search-forward\nfi'
     fi
+
+    local completion_finalize_block=""
+    completion_finalize_block="$(cat <<'COMPLETION_FINALIZE_BLOCK'
+# Completion ordering:
+# 1) bash-it loads configured completions first.
+# 2) ble.sh loads last for line-editing features.
+# 3) Rebind/selectively sanitize command completions so command-aware
+#    completion wins instead of file/dir fallback in command contexts.
+__setup_bash_strip_completion_fallback() {
+    local cmd="$1"
+    local spec=""
+
+    spec="$(complete -p "$cmd" 2>/dev/null || true)"
+    [[ -n "$spec" ]] || return 0
+
+    spec="${spec// -o default/}"
+    spec="${spec// -o bashdefault/}"
+    eval "$spec"
+}
+
+__setup_bash_load_kubectl_completion() {
+    if declare -F __start_kubectl >/dev/null 2>&1 || declare -F _start_kubectl >/dev/null 2>&1; then
+        return 0
+    fi
+
+    # Fallback: source completion directly from kubectl when not already loaded.
+    if command -v kubectl >/dev/null 2>&1; then
+        source <(kubectl completion bash 2>/dev/null) || true
+    fi
+}
+
+if command -v kubectl >/dev/null 2>&1; then
+    __setup_bash_load_kubectl_completion
+
+    if declare -F __start_kubectl >/dev/null 2>&1; then
+        complete -o nospace -F __start_kubectl kubectl
+        complete -o nospace -F __start_kubectl k
+    elif declare -F _start_kubectl >/dev/null 2>&1; then
+        complete -o nospace -F _start_kubectl kubectl
+        complete -o nospace -F _start_kubectl k
+    fi
+
+    __setup_bash_strip_completion_fallback kubectl
+    __setup_bash_strip_completion_fallback k
+fi
+
+# Helm can also inherit file fallback depending on completion source.
+if command -v helm >/dev/null 2>&1; then
+    __setup_bash_strip_completion_fallback helm
+fi
+
+unset -f __setup_bash_load_kubectl_completion
+unset -f __setup_bash_strip_completion_fallback
+COMPLETION_FINALIZE_BLOCK
+)"
 
     local proxy_block=""
     proxy_block="$(cat <<'PROXY_BLOCK'
@@ -902,6 +957,7 @@ ${kube_ps1_block}
 ${kubectx_block}
 ${proxy_block}
 ${blesh_block}
+${completion_finalize_block}
 # <<< setup-bash.sh <<<
 EOF
 }
