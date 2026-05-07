@@ -741,6 +741,78 @@ prompt_components() {
     info "Selected components: ${summary[*]}"
 }
 
+sync_bash_it_enabled_links() {
+    local bash_it_dir="$TARGET_HOME/.bash_it"
+    local enabled_dir="$bash_it_dir/enabled"
+
+    if [[ "$DRY_RUN" == false && ! -d "$bash_it_dir" ]]; then
+        fatal "Bash-it directory not found at $bash_it_dir"
+    fi
+
+    info "Syncing Bash-it enabled links for selected components"
+    run_cmd mkdir -p "$enabled_dir"
+
+    local entry=""
+    local ctype=""
+    local cname=""
+    local _desc=""
+    local _os=""
+    local suffix=""
+    local subdir=""
+
+    # Remove links for components managed by this setup script before re-adding current selection.
+    for entry in "${COMPONENT_CANDIDATES[@]}"; do
+        IFS='|' read -r ctype cname _desc _os <<< "$entry"
+        case "$ctype" in
+            alias)
+                suffix="aliases"
+                ;;
+            completion)
+                suffix="completion"
+                ;;
+            plugin)
+                suffix="plugin"
+                ;;
+            *)
+                continue
+                ;;
+        esac
+
+        run_cmd rm -f "$enabled_dir/${cname}.${suffix}.bash" "$enabled_dir/250---${cname}.${suffix}.bash"
+    done
+
+    for entry in "${SELECTED_COMPONENTS[@]}"; do
+        IFS='|' read -r ctype cname _desc _os <<< "$entry"
+        case "$ctype" in
+            alias)
+                subdir="aliases"
+                suffix="aliases"
+                ;;
+            completion)
+                subdir="completion"
+                suffix="completion"
+                ;;
+            plugin)
+                subdir="plugins"
+                suffix="plugin"
+                ;;
+            *)
+                continue
+                ;;
+        esac
+
+        local source_file="$bash_it_dir/$subdir/available/${cname}.${suffix}.bash"
+        if [[ "$DRY_RUN" == false && ! -f "$source_file" ]]; then
+            warn "Skipping missing component file: $source_file"
+            continue
+        fi
+
+        run_cmd ln -sfn "../${subdir}/available/${cname}.${suffix}.bash" "$enabled_dir/250---${cname}.${suffix}.bash"
+    done
+
+    success "Synced Bash-it enabled links in $enabled_dir"
+}
+
 build_managed_block() {
     local aliases=""
     local completions=""
@@ -1368,6 +1440,7 @@ main() {
     install_bash_completion
     install_bash_it
     prompt_components
+    sync_bash_it_enabled_links
     install_kube_ps1
     install_kubectx
     install_blesh
