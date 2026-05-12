@@ -64,7 +64,7 @@ SELECTED_COMPONENTS=()
 
 # External components presented alongside bash-it components in the menu
 EXTERNAL_CANDIDATES=(
-    "external|kube-ps1|Kubernetes context/namespace in prompt (kubeon/kubeoff)|all"
+    "external|kube-ps1|Kubernetes context/namespace in prompt (auto when ~/.kube/config exists)|all"
     "external|kubectx|Fast context (kubectx) and namespace (kubens) switcher|all"
     "external|ble.sh|Inline history autosuggestions and syntax highlighting for bash|all"
 )
@@ -842,42 +842,16 @@ build_managed_block() {
         local kube_ps1_block=""
         if [[ "$INSTALL_KUBE_PS1" == true ]]; then
                 kube_ps1_block="$(cat <<'KUBE_PS1_BLOCK'
-# kube-ps1: kubeon/kubeoff toggle for context/namespace in prompt
+# kube-ps1: show context/namespace whenever ~/.kube/config exists.
+# kubeon/kubeoff still work to override the default in a shell session.
 KUBE_PS1_DIR="$HOME/.kube-ps1"
 if [[ -f "$KUBE_PS1_DIR/kube-ps1.sh" ]]; then
     source "$KUBE_PS1_DIR/kube-ps1.sh"
-    KUBE_PS1_ENABLED=off
-
-    __setup_bash_last_kube_segment=""
-    __setup_bash_kube_ps1_prompt() {
-        local kube_segment kube_prefix
-
-        if [[ -n "$__setup_bash_last_kube_segment" ]]; then
-            kube_prefix="${__setup_bash_last_kube_segment} "
-            PS1="${PS1#"$kube_prefix"}"
-            if [[ -n "${__setup_bash_prompt_marker_raw:-}" ]]; then
-                PS1="${PS1/${__setup_bash_prompt_marker_raw}${kube_prefix}/${__setup_bash_prompt_marker_raw}}"
-            fi
-        fi
-
-        if declare -F _kube_ps1_prompt_update >/dev/null 2>&1; then
-            _kube_ps1_prompt_update >/dev/null 2>&1 || true
-        fi
-
-        kube_segment="$(kube_ps1 2>/dev/null)"
-        if [[ -n "$kube_segment" ]]; then
-            kube_prefix="${kube_segment} "
-            if [[ -n "${__setup_bash_prompt_marker_raw:-}" ]] && [[ "$PS1" == *"${__setup_bash_prompt_marker_raw}"* ]]; then
-                PS1="${PS1/${__setup_bash_prompt_marker_raw}/${__setup_bash_prompt_marker_raw}${kube_prefix}}"
-            else
-                PS1="$kube_prefix$PS1"
-            fi
-        fi
-
-        __setup_bash_last_kube_segment="$kube_segment"
-    }
-
-    PROMPT_COMMAND="${PROMPT_COMMAND:+${PROMPT_COMMAND}; }__setup_bash_kube_ps1_prompt"
+    if [[ -f "$HOME/.kube/config" ]]; then
+        KUBE_PS1_ENABLED=on
+    else
+        KUBE_PS1_ENABLED=off
+    fi
 fi
 KUBE_PS1_BLOCK
 )"
@@ -1064,7 +1038,7 @@ PROXY_BLOCK
 )"
 
     local pure_theme_block=""
-    pure_theme_block=$'\n# pure theme tweak: show only the current directory name (\\W) instead of full path (\\w).\nif [[ "${BASH_IT_THEME:-}" == "pure" ]] && declare -F pure_prompt >/dev/null 2>&1; then\n  __setup_bash_prompt_marker_raw="➜  "\n  pure_prompt() {\n    local ps_host="${bold_blue?}\\h${normal?}"\n    local ps_user="${green?}\\u${normal?}"\n    local ps_user_mark="${green?}${__setup_bash_prompt_marker_raw}${normal?}"\n    local ps_root="${red?}\\u${red?}"\n    local ps_root_mark="${red?} # ${normal?}"\n    local ps_path="${yellow?}\\W${normal?}"\n    local virtualenv_prompt scm_prompt\n    virtualenv_prompt="$(virtualenv_prompt)"\n    scm_prompt="$(scm_prompt)"\n    case "${EUID:-$UID}" in\n      0)\n        ps_user_mark="${ps_root_mark}"\n        ps_user="${ps_root}"\n        ;;\n    esac\n    PS1="${ps_user_mark}${virtualenv_prompt}${ps_user}@${ps_host}${scm_prompt}:${ps_path} "\n  }\nfi'
+    pure_theme_block=$'\n# pure theme tweak: show only the current directory name (\\W) instead of full path (\\w).\nif [[ "${BASH_IT_THEME:-}" == "pure" ]] && declare -F pure_prompt >/dev/null 2>&1; then\n  __setup_bash_prompt_marker_raw="➜  "\n  pure_prompt() {\n    local ps_host="${bold_blue?}\\h${normal?}"\n    local ps_user="${green?}\\u${normal?}"\n    local ps_user_mark="${green?}${__setup_bash_prompt_marker_raw}${normal?}"\n    local ps_root="${red?}\\u${red?}"\n    local ps_root_mark="${red?} # ${normal?}"\n    local ps_path="${yellow?}\\W${normal?}"\n    local kube_segment virtualenv_prompt scm_prompt\n    if declare -F _kube_ps1_prompt_update >/dev/null 2>&1; then\n      _kube_ps1_prompt_update >/dev/null 2>&1 || true\n    fi\n    kube_segment="$(kube_ps1 2>/dev/null || true)"\n    if [[ -n "$kube_segment" ]]; then\n      kube_segment+=" "\n    fi\n    virtualenv_prompt="$(virtualenv_prompt)"\n    scm_prompt="$(scm_prompt)"\n    case "${EUID:-$UID}" in\n      0)\n        ps_user_mark="${ps_root_mark}"\n        ps_user="${ps_root}"\n        ;;\n    esac\n    PS1="${ps_user_mark}${kube_segment}${virtualenv_prompt}${ps_user}@${ps_host}${scm_prompt}:${ps_path} "\n  }\nfi'
 
     cat <<EOF
 # >>> setup-bash.sh >>>
